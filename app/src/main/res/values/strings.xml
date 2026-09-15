@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Focus Kiosk</string>
+    <string name="device_admin_description">Manages digital detox lock policies, app visibility, and anti-tamper controls.</string>
+    <string name="unlock_in">Unlocks in: %s</string>
+</resources>

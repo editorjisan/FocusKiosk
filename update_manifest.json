@@ -1,0 +1,8 @@
+{
+  "versionCode": 2,
+  "versionName": "1.0.1",
+  "apkUrl": "https://github.com/jisan/FocusKiosk/releases/latest/download/app-release.apk",
+  "sha256": "",
+  "releaseNotes": "Enhanced navigation, Material 3 UI, and silent OTA updates.",
+  "minSdkVersion": 28
+}
