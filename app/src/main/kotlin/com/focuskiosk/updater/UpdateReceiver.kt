@@ -25,6 +25,17 @@ class UpdateReceiver : BroadcastReceiver() {
     }
 
     override fun onReceive(context: Context, intent: Intent) {
+        val action = intent.action
+        Log.i(TAG, "UpdateReceiver received action: $action")
+
+        if (Intent.ACTION_MY_PACKAGE_REPLACED == action) {
+            Log.i(TAG, "ACTION_MY_PACKAGE_REPLACED received — app has been upgraded in the background!")
+            cleanupCacheApks(context)
+            // Verify lock state / fail-safe post-upgrade
+            com.focuskiosk.policy.KioskRestoreManager.checkAndRestoreIfExpired(context)
+            return
+        }
+
         val status    = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)
         val message   = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)
         val sessionId = intent.getIntExtra(PackageInstaller.EXTRA_SESSION_ID, -1)
@@ -34,15 +45,7 @@ class UpdateReceiver : BroadcastReceiver() {
                 Log.i(TAG, "=======================================================")
                 Log.i(TAG, "SILENT UPDATE SUCCESSFUL: Session $sessionId committed.")
                 Log.i(TAG, "=======================================================")
-
-                // Clean up cached APK files in externalCacheDir and cacheDir
-                val cacheDirs = listOfNotNull(context.externalCacheDir, context.cacheDir)
-                for (dir in cacheDirs) {
-                    dir.listFiles { f -> f.name.endsWith(".apk") }?.forEach { apk ->
-                        val deleted = apk.delete()
-                        Log.d(TAG, "Cleaned up cache APK: ${apk.name} -> $deleted")
-                    }
-                }
+                cleanupCacheApks(context)
             }
             PackageInstaller.STATUS_PENDING_USER_ACTION -> {
                 Log.w(TAG, "Install requires user action. Ensure app is provisioned as Device Owner. Session: $sessionId")
@@ -53,5 +56,17 @@ class UpdateReceiver : BroadcastReceiver() {
                 Log.e(TAG, "Silent install failed! Status: $status, Message: $message, Session: $sessionId")
             }
         }
+    }
+
+    private fun cleanupCacheApks(context: Context) {
+        runCatching {
+            val cacheDirs = listOfNotNull(context.externalCacheDir, context.cacheDir)
+            for (dir in cacheDirs) {
+                dir.listFiles { f -> f.name.endsWith(".apk") }?.forEach { apk ->
+                    val deleted = apk.delete()
+                    Log.d(TAG, "Cleaned up cache APK: ${apk.name} -> $deleted")
+                }
+            }
+        }.onFailure { Log.w(TAG, "Error cleaning cache APKs: ${it.message}") }
     }
 }

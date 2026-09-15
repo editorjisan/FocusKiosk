@@ -98,12 +98,13 @@
             </intent-filter>
         </receiver>
 
-        <!-- SILENT UPDATE RESULT RECEIVER (PackageInstaller commit target) -->
+        <!-- SILENT UPDATE RESULT RECEIVER (PackageInstaller commit target & app replaced) -->
         <receiver
             android:name=".updater.UpdateReceiver"
             android:exported="false">
             <intent-filter>
                 <action android:name="com.focuskiosk.updater.INSTALL_RESULT" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
 

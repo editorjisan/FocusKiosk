@@ -89,24 +89,18 @@ object KioskRestoreManager {
 
         Log.i(TAG, "Found ${packagesToRestore.size} installed packages to inspect & restore.")
 
-        // 3. Unhide all non-whitelisted and user apps
+        // 3. Unhide all non-whitelisted and user apps unconditionally
         var unhiddenCount = 0
         packagesToRestore.forEach { pkg ->
             runCatching {
-                val isHidden = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                    devicePolicyManager.isApplicationHidden(adminComponent, pkg)
-                } else false
-
-                if (isHidden) {
-                    val success = devicePolicyManager.setApplicationHidden(adminComponent, pkg, false)
-                    if (success) unhiddenCount++
-                    Log.d(TAG, "setApplicationHidden($pkg, false) -> $success")
-                }
+                val success = devicePolicyManager.setApplicationHidden(adminComponent, pkg, false)
+                if (success) unhiddenCount++
+                Log.d(TAG, "setApplicationHidden($pkg, false) -> $success")
             }.onFailure {
                 Log.w(TAG, "Failed to unhide $pkg: ${it.message}")
             }
         }
-        Log.i(TAG, "Successfully unhidden $unhiddenCount applications.")
+        Log.i(TAG, "Successfully processed unhiding for $unhiddenCount applications.")
 
         // 4. Unsuspend all packages in bulk
         val packagesToUnsuspend = packagesToRestore.toTypedArray()
@@ -128,6 +122,7 @@ object KioskRestoreManager {
             devicePolicyManager.clearUserRestriction(adminComponent, UserManager.DISALLOW_INSTALL_APPS)
             devicePolicyManager.clearUserRestriction(adminComponent, UserManager.DISALLOW_DEBUGGING_FEATURES)
             devicePolicyManager.clearUserRestriction(adminComponent, UserManager.DISALLOW_FACTORY_RESET)
+            devicePolicyManager.clearUserRestriction(adminComponent, UserManager.DISALLOW_APPS_CONTROL)
             Log.i(TAG, "All anti-tamper and install restrictions cleared.")
         }.onFailure { Log.w(TAG, "Error clearing user restrictions: ${it.message}") }
 
