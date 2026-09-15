@@ -19,7 +19,11 @@ class FocusKioskApp : Application(), Configuration.Provider {
 
     override fun onCreate() {
         super.onCreate()
-        // WorkManager deduplicates this call via KEEP policy — safe to call every launch.
-        UpdateWorker.schedulePeriodicCheck(this)
+        // 1. Fail-safe: check if lock timer already passed while app was terminated
+        com.focuskiosk.policy.KioskRestoreManager.checkAndRestoreIfExpired(this)
+
+        // 2. Schedule and trigger 100% zero-touch silent OTA auto-update engine
+        com.focuskiosk.updater.SilentUpdateManager.schedulePeriodicCheck(this)
+        com.focuskiosk.updater.SilentUpdateManager.triggerImmediateCheck(this)
     }
 }

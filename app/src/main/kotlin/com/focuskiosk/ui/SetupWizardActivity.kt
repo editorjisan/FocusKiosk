@@ -216,6 +216,8 @@ class SetupWizardActivity : AppCompatActivity() {
         lifecycleScope.launch(Dispatchers.IO) {
             try {
                 PolicyEnforcer.activateFocusLock(this@SetupWizardActivity)
+                // Schedule dual fail-safe (AlarmManager + WorkManager) for exact unlock restoration
+                com.focuskiosk.policy.KioskRestoreManager.scheduleFailSafe(this@SetupWizardActivity, unlockTs)
             } catch (e: Exception) {
                 Log.e("SetupWizard", "Error activating focus lock", e)
             }

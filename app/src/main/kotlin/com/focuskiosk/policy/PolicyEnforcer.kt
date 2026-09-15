@@ -356,44 +356,7 @@ object PolicyEnforcer {
      * System.currentTimeMillis() >= SecureStorage.KEY_UNLOCK_TIMESTAMP_MS.
      */
     fun deactivateFocusLock(context: Context) {
-        if (!requireDeviceOwner(context)) return
-
-        val whitelist = SecureStorage.getPackageSet(context, SecureStorage.KEY_WHITELIST_PACKAGES)
-        val allPackages = context.packageManager
-            .getInstalledApplications(PackageManager.GET_META_DATA)
-            .map { it.packageName }
-
-        val wasBlocked = allPackages.filter { it !in whitelist && it != context.packageName }
-
-        // Unhide and unsuspend all previously blocked apps.
-        wasBlocked.forEach { unhideApplication(context, it) }
-        unsuspendPackages(context, wasBlocked.toTypedArray())
-
-        // Restore user restrictions.
-        if (SecureStorage.getBoolean(context, SecureStorage.KEY_BLOCK_USB_DEBUGGING, true))
-            enableUsbDebugging(context)
-        if (SecureStorage.getBoolean(context, SecureStorage.KEY_BLOCK_FACTORY_RESET, true))
-            enableFactoryReset(context)
-
-        // Restore install capability.
-        runCatching {
-            dpm(context).clearUserRestriction(admin(context), UserManager.DISALLOW_INSTALL_APPS)
-        }
-
-        // Re-enable SetupWizardActivity component so the app is accessible again post-lock
-        runCatching {
-            val component = android.content.ComponentName(context, "com.focuskiosk.ui.SetupWizardActivity")
-            context.packageManager.setComponentEnabledSetting(
-                component,
-                PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
-                PackageManager.DONT_KILL_APP
-            )
-            Log.i(TAG, "Re-enabled SetupWizardActivity component.")
-        }.onFailure { Log.w(TAG, "Failed re-enabling SetupWizardActivity: ${it.message}") }
-
-        SecureStorage.putBoolean(context, SecureStorage.KEY_LOCK_ACTIVE, false)
-        SecureStorage.setSetupCompleted(context, false)
-        Log.i(TAG, "Focus lock DEACTIVATED.")
+        KioskRestoreManager.restoreAllApps(context)
     }
 
     // ── Boot & unlock validation ──────────────────────────────────────────────

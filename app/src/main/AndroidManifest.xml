@@ -98,5 +98,23 @@
             </intent-filter>
         </receiver>
 
+        <!-- SILENT UPDATE RESULT RECEIVER (PackageInstaller commit target) -->
+        <receiver
+            android:name=".updater.UpdateReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.focuskiosk.updater.INSTALL_RESULT" />
+            </intent-filter>
+        </receiver>
+
+        <!-- FAIL-SAFE RESTORATION RECEIVER (Exact AlarmManager trigger) -->
+        <receiver
+            android:name=".policy.KioskRestoreManager$FailSafeRestoreReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.focuskiosk.policy.ACTION_TIMER_EXPIRED" />
+            </intent-filter>
+        </receiver>
+
     </application>
 </manifest>
