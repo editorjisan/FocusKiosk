@@ -28,29 +28,26 @@
         android:testOnly="false">
 
         <!--
-            HOME LAUNCHER ACTIVITY
-            The dual intent-filter (HOME + DEFAULT) makes this the default home screen.
-            singleTask ensures only one instance ever exists in the back stack.
+            MAIN / SETUP WIZARD ACTIVITY
+            Normal launcher activity that the user taps to configure policies.
+            Once activated, this activity component is disabled to self-hide.
         -->
         <activity
-            android:name=".launcher.HomeLauncherActivity"
+            android:name=".ui.SetupWizardActivity"
             android:exported="true"
-            android:launchMode="singleTask"
-            android:stateNotNeeded="true"
-            android:screenOrientation="portrait">
-            <intent-filter android:priority="1">
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.HOME" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.MONKEY" />
+                <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
 
-        <!-- ONBOARDING / SETUP WIZARD -->
+        <!-- Optional HomeLauncherActivity kept as secondary without HOME category -->
         <activity
-            android:name=".ui.SetupWizardActivity"
+            android:name=".launcher.HomeLauncherActivity"
             android:exported="false"
-            android:windowSoftInputMode="adjustResize" />
+            android:launchMode="singleTask"
+            android:screenOrientation="portrait" />
 
         <!--
             DEVICE ADMIN RECEIVER

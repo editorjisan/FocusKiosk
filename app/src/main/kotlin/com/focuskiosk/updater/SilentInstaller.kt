@@ -4,6 +4,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageInstaller
+import android.content.pm.PackageManager
 import android.util.Log
 import java.io.File
 import java.io.FileInputStream
@@ -43,6 +44,9 @@ object SilentInstaller {
         ).apply {
             setAppPackageName(context.packageName)
             setSize(apkFile.length())
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                setInstallReason(PackageManager.INSTALL_REASON_POLICY)
+            }
         }
 
         val sessionId = installer.createSession(params)

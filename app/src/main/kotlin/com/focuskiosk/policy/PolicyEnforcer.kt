@@ -224,10 +224,16 @@ object PolicyEnforcer {
         "com.android.inputmethod.latin",
         "com.samsung.android.honeyboard",
         "com.swiftkey.swiftkeyapp",
-        // Launchers (we must not hide the fallback)
+        // Launchers (we must NEVER hide or suspend stock launchers)
         "com.android.launcher3",
         "com.google.android.apps.nexuslauncher",
         "com.android.launcher",
+        "com.sec.android.app.launcher",
+        "com.miui.home",
+        "com.oppo.launcher",
+        "com.oneplus.launcher",
+        "com.huawei.android.launcher",
+        "com.transsion.hilauncher",
         // Accessibility
         "com.google.android.marvin.talkback",
         "com.android.tts",
@@ -294,6 +300,12 @@ object PolicyEnforcer {
                 dpm(context).setKeyguardDisabled(admin(context), false)
             }
         }.onFailure { Log.w(TAG, "Failed setting LockTask features: ${it.message}") }
+
+        // Explicitly clear any persistent preferred launcher activities so stock launcher takes over
+        runCatching {
+            dpm(context).clearPackagePersistentPreferredActivities(admin(context), context.packageName)
+            Log.i(TAG, "Cleared persistent preferred activities for ${context.packageName}")
+        }.onFailure { Log.w(TAG, "Failed clearing persistent preferred activities: ${it.message}") }
 
         // All installed packages, filtered through safety check.
         val allPackages = context.packageManager
@@ -368,7 +380,19 @@ object PolicyEnforcer {
             dpm(context).clearUserRestriction(admin(context), UserManager.DISALLOW_INSTALL_APPS)
         }
 
+        // Re-enable SetupWizardActivity component so the app is accessible again post-lock
+        runCatching {
+            val component = android.content.ComponentName(context, "com.focuskiosk.ui.SetupWizardActivity")
+            context.packageManager.setComponentEnabledSetting(
+                component,
+                PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                PackageManager.DONT_KILL_APP
+            )
+            Log.i(TAG, "Re-enabled SetupWizardActivity component.")
+        }.onFailure { Log.w(TAG, "Failed re-enabling SetupWizardActivity: ${it.message}") }
+
         SecureStorage.putBoolean(context, SecureStorage.KEY_LOCK_ACTIVE, false)
+        SecureStorage.setSetupCompleted(context, false)
         Log.i(TAG, "Focus lock DEACTIVATED.")
     }
 

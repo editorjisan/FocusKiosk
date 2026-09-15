@@ -222,10 +222,25 @@ class SetupWizardActivity : AppCompatActivity() {
 
             withContext(Dispatchers.Main) {
                 SecureStorage.setSetupCompleted(this@SetupWizardActivity, true)
-                val intent = Intent(this@SetupWizardActivity, HomeLauncherActivity::class.java).apply {
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+
+                // Self-hide: disable SetupWizardActivity component so the app vanishes from the stock launcher & app drawer
+                try {
+                    packageManager.setComponentEnabledSetting(
+                        android.content.ComponentName(this@SetupWizardActivity, SetupWizardActivity::class.java),
+                        PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                        PackageManager.DONT_KILL_APP
+                    )
+                    Log.i("SetupWizard", "SetupWizardActivity disabled. FocusKiosk is now hidden in stealth mode.")
+                } catch (e: Exception) {
+                    Log.e("SetupWizard", "Failed to disable component", e)
                 }
-                startActivity(intent)
+
+                // Return user to the native stock home launcher
+                val homeIntent = Intent(Intent.ACTION_MAIN).apply {
+                    addCategory(Intent.CATEGORY_HOME)
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                startActivity(homeIntent)
                 finishAffinity()
             }
         }
