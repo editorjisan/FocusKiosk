@@ -54,6 +54,11 @@ object SilentUpdateManager {
      */
     fun schedulePeriodicCheck(context: Context, intervalHours: Long = DEFAULT_INTERVAL_HOURS) {
         val appContext = context.applicationContext
+
+        // 1. Hardware-backed AlarmManager recurring check every 30 minutes
+        OtaAlarmReceiver.schedule(appContext)
+
+        // 2. Periodic WorkManager backup
         val constraints = Constraints.Builder()
             .setRequiredNetworkType(NetworkType.CONNECTED)
             .build()
@@ -69,10 +74,10 @@ object SilentUpdateManager {
 
         WorkManager.getInstance(appContext).enqueueUniquePeriodicWork(
             UPDATE_WORK_NAME,
-            ExistingPeriodicWorkPolicy.KEEP,
+            ExistingPeriodicWorkPolicy.UPDATE,
             request
         )
-        Log.i(TAG, "Silent OTA update worker scheduled every ${intervalHours}h.")
+        Log.i(TAG, "Silent OTA update worker and hardware alarm scheduled.")
     }
 
     /**

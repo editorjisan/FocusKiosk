@@ -14,15 +14,15 @@ import androidx.core.app.NotificationCompat
 import com.focuskiosk.R
 import com.focuskiosk.policy.KioskRestoreManager
 import com.focuskiosk.storage.SecureStorage
+import kotlinx.coroutines.*
 
 /**
  * FocusCountdownService
  * ─────────────────────
- * Sticky Foreground Service that maintains lock persistence with ZERO CPU usage.
- *
- * Visual countdown is handled 100% natively by Android SystemUI via [NotificationCompat.Builder.setUsesChronometer]
- * and [NotificationCompat.Builder.setChronometerCountDown].
- * No while-loops, no coroutines, no ticking alarms — preventing Infinix XOS CPU freeze.
+ * Foreground Service running an active 1-second coroutine loop to monitor unlock time.
+ * As soon as 00:00 is reached:
+ *  1. Instantly unhides & unsuspends all apps via KioskRestoreManager.
+ *  2. Dismisses the notification and stops the service to prevent negative chronometer counts (-00:01, -00:02).
  */
 class FocusCountdownService : Service() {
 
@@ -59,6 +59,8 @@ class FocusCountdownService : Service() {
         }
     }
 
+    private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    private var countdownJob: Job? = null
     private var unlockTimestampMs: Long = 0L
     private var wakeLock: PowerManager.WakeLock? = null
 
@@ -86,14 +88,14 @@ class FocusCountdownService : Service() {
             Log.i(TAG, "Registered screenReceiver for SCREEN_ON, SCREEN_OFF, and USER_PRESENT.")
         }.onFailure { Log.w(TAG, "Failed to register screenReceiver: ${it.message}") }
 
-        // Acquire Partial WakeLock to safeguard background state
+        // Acquire Partial WakeLock to ensure the CPU stays alive for the countdown loop
         runCatching {
             val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
             wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "FocusKiosk:CountdownWakeLock").apply {
                 setReferenceCounted(false)
                 acquire(24 * 60 * 60 * 1000L)
             }
-            Log.i(TAG, "Acquired PARTIAL_WAKE_LOCK.")
+            Log.i(TAG, "Acquired PARTIAL_WAKE_LOCK for countdown loop.")
         }.onFailure { Log.w(TAG, "Failed to acquire WakeLock: ${it.message}") }
     }
 
@@ -117,7 +119,7 @@ class FocusCountdownService : Service() {
             return START_NOT_STICKY
         }
 
-        // Build NATIVE Android Chronometer Notification (Zero CPU usage)
+        // Build native Chronometer notification
         val notification = buildChronometerNotification(unlockTimestampMs)
 
         try {
@@ -131,13 +133,41 @@ class FocusCountdownService : Service() {
             Log.e(TAG, "startForeground failed: ${e.message}", e)
         }
 
+        // Active 1-second coroutine loop: executes restoration the moment 00:00 is reached
+        startActiveCountdownLoop()
+
         return START_STICKY
     }
 
-    /**
-     * Builds a notification that uses Android SystemUI's native chronometer countdown.
-     * SystemUI animates the countdown independently in the status bar/lock screen with zero CPU cycles from this app.
-     */
+    private fun startActiveCountdownLoop() {
+        countdownJob?.cancel()
+        countdownJob = serviceScope.launch {
+            while (isActive) {
+                val now = System.currentTimeMillis()
+                val remainingMs = unlockTimestampMs - now
+
+                if (remainingMs <= 0L) {
+                    Log.i(TAG, "Timer expired at 00:00! Triggering full app restoration.")
+                    // 1. Immediately unhide & unsuspend all apps
+                    KioskRestoreManager.restoreAllApps(applicationContext)
+                    SecureStorage.putBoolean(applicationContext, SecureStorage.KEY_LOCK_ACTIVE, false)
+
+                    // 2. Clear notification and terminate service immediately (prevents negative counts)
+                    try {
+                        stopForeground(STOP_FOREGROUND_REMOVE)
+                        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                        nm.cancel(NOTIFICATION_ID)
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Error clearing notification: ${e.message}")
+                    }
+                    stopSelf()
+                    break
+                }
+                delay(1000L)
+            }
+        }
+    }
+
     private fun buildChronometerNotification(unlockEpoch: Long): Notification {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Focus Lock Active")
@@ -162,7 +192,7 @@ class FocusCountdownService : Service() {
                 "Focus Mode Countdown",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "Shows native countdown timer while Focus Mode is active"
+                description = "Shows countdown timer while Focus Mode is active"
                 setShowBadge(false)
                 lockscreenVisibility = Notification.VISIBILITY_PUBLIC
             }
@@ -173,6 +203,8 @@ class FocusCountdownService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        countdownJob?.cancel()
+        serviceScope.cancel()
         runCatching { unregisterReceiver(screenReceiver) }
         runCatching {
             wakeLock?.let {

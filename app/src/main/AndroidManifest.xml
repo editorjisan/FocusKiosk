@@ -122,10 +122,19 @@
         <!-- SILENT UPDATE RESULT RECEIVER (PackageInstaller commit target & app replaced) -->
         <receiver
             android:name=".updater.UpdateReceiver"
-            android:exported="false">
+            android:exported="true">
             <intent-filter>
                 <action android:name="com.focuskiosk.updater.INSTALL_RESULT" />
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- HARDWARE-BACKED RECURRING OTA CHECK ALARM RECEIVER -->
+        <receiver
+            android:name=".updater.OtaAlarmReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.focuskiosk.ACTION_CHECK_OTA" />
             </intent-filter>
         </receiver>
 
