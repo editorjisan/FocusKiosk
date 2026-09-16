@@ -27,6 +27,7 @@ object SecureStorage {
     // ── Key constants ────────────────────────────────────────────────────────
     const val KEY_UNLOCK_TIMESTAMP_MS = "unlock_timestamp_ms"
     const val KEY_WHITELIST_PACKAGES   = "whitelist_packages"
+    const val KEY_BLOCKED_PACKAGES     = "blocked_packages"
     const val KEY_LOCK_ACTIVE          = "lock_active"
     const val KEY_BLOCK_FACTORY_RESET  = "block_factory_reset"
     const val KEY_BLOCK_USB_DEBUGGING  = "block_usb_debugging"
@@ -94,6 +95,12 @@ object SecureStorage {
 
     fun isLockActive(context: Context): Boolean =
         getBoolean(context, KEY_LOCK_ACTIVE)
+
+    fun setBlockedPackages(context: Context, packages: Set<String>) =
+        putPackageSet(context, KEY_BLOCKED_PACKAGES, packages)
+
+    fun getBlockedPackages(context: Context): Set<String> =
+        getPackageSet(context, KEY_BLOCKED_PACKAGES)
 
     fun getUnlockTimestampMs(context: Context): Long =
         getLong(context, KEY_UNLOCK_TIMESTAMP_MS)

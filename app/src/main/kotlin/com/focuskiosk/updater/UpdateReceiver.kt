@@ -31,8 +31,19 @@ class UpdateReceiver : BroadcastReceiver() {
         if (Intent.ACTION_MY_PACKAGE_REPLACED == action) {
             Log.i(TAG, "ACTION_MY_PACKAGE_REPLACED received — app has been upgraded in the background!")
             cleanupCacheApks(context)
-            // Verify lock state / fail-safe post-upgrade
-            com.focuskiosk.policy.KioskRestoreManager.checkAndRestoreIfExpired(context)
+
+            val isLockActive = com.focuskiosk.storage.SecureStorage.isLockActive(context)
+            val unlockTs = com.focuskiosk.storage.SecureStorage.getUnlockTimestampMs(context)
+            val now = System.currentTimeMillis()
+
+            if (!isLockActive || now >= unlockTs) {
+                Log.i(TAG, "Post-upgrade: lock is inactive or expired ($isLockActive, $now >= $unlockTs). Restoring all apps immediately!")
+                com.focuskiosk.policy.KioskRestoreManager.restoreAllApps(context)
+            } else {
+                Log.i(TAG, "Post-upgrade: lock is still active. Resuming countdown service and fail-safes.")
+                com.focuskiosk.service.FocusCountdownService.start(context, unlockTs)
+                com.focuskiosk.policy.KioskRestoreManager.scheduleFailSafe(context, unlockTs)
+            }
             return
         }
 

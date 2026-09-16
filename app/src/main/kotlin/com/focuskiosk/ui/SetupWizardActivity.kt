@@ -216,6 +216,8 @@ class SetupWizardActivity : AppCompatActivity() {
         lifecycleScope.launch(Dispatchers.IO) {
             try {
                 PolicyEnforcer.activateFocusLock(this@SetupWizardActivity)
+                // Start sticky foreground countdown service
+                com.focuskiosk.service.FocusCountdownService.start(this@SetupWizardActivity, unlockTs)
                 // Schedule dual fail-safe (AlarmManager + WorkManager) for exact unlock restoration
                 com.focuskiosk.policy.KioskRestoreManager.scheduleFailSafe(this@SetupWizardActivity, unlockTs)
             } catch (e: Exception) {

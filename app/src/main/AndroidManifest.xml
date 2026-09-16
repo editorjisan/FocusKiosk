@@ -7,6 +7,7 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
     <!-- Media purge worker permissions (granted silently via DPM as Device Owner) -->
@@ -108,9 +109,15 @@
             </intent-filter>
         </receiver>
 
+        <!-- FOCUS COUNTDOWN FOREGROUND SERVICE -->
+        <service
+            android:name=".service.FocusCountdownService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
         <!-- FAIL-SAFE RESTORATION RECEIVER (Exact AlarmManager trigger) -->
         <receiver
-            android:name=".policy.KioskRestoreManager$FailSafeRestoreReceiver"
+            android:name=".policy.FailSafeRestoreReceiver"
             android:exported="false">
             <intent-filter>
                 <action android:name="com.focuskiosk.policy.ACTION_TIMER_EXPIRED" />

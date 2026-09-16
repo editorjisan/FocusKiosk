@@ -1,8 +1,8 @@
 {
-  "versionCode": 2,
-  "versionName": "1.0.1",
-  "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.0.1/FocusKiosk.apk",
-  "sha256": "5a4fa3fa783c1d88c3faa96d94d56da417f9555c24e3fb09a0e7a8e762a0776b",
-  "releaseNotes": "Added vector adaptive launcher icon for silent OTA visual verification",
+  "versionCode": 3,
+  "versionName": "1.0.2",
+  "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.0.2/FocusKiosk.apk",
+  "sha256": "7f5bc5868315cb478a2d765d4dd2a330da38c24588d8327a2155c43e4db8e36f",
+  "releaseNotes": "Fix hidden app restoration query with MATCH_UNINSTALLED_PACKAGES, add FocusCountdownService, and robust dual fail-safe",
   "minSdkVersion": 28
 }

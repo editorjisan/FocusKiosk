@@ -316,6 +316,9 @@ object PolicyEnforcer {
         val toBlock = allPackages.filter { it !in whitelist }
         Log.i(TAG, "Packages to block: ${toBlock.size} / ${allPackages.size}")
 
+        // Persist explicit set of blocked packages so restoration never has to guess
+        SecureStorage.setBlockedPackages(context, toBlock.toSet())
+
         // 1. Hide each non-whitelisted app individually (per-package try-catch).
         var hidden = 0; var hideFailed = 0
         toBlock.forEach { pkg ->
@@ -370,6 +373,9 @@ object PolicyEnforcer {
         } else {
             Log.i(TAG, "Re-enforcing focus lock after boot.")
             activateFocusLock(context)
+            val unlockTs = SecureStorage.getUnlockTimestampMs(context)
+            com.focuskiosk.service.FocusCountdownService.start(context, unlockTs)
+            KioskRestoreManager.scheduleFailSafe(context, unlockTs)
         }
     }
 

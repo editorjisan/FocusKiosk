@@ -13,6 +13,7 @@ import android.os.UserManager
 import android.util.Log
 import androidx.work.*
 import com.focuskiosk.admin.FocusDeviceAdminReceiver
+import com.focuskiosk.service.FocusCountdownService
 import com.focuskiosk.storage.SecureStorage
 import java.util.concurrent.TimeUnit
 
@@ -69,27 +70,37 @@ object KioskRestoreManager {
         val devicePolicyManager = dpm(appContext)
         val adminComponent = admin(appContext)
 
+        // 0. Stop the foreground countdown service if active
+        FocusCountdownService.stop(appContext)
+
         // 1. Clear any persistent preferred home/launcher activities
         runCatching {
             devicePolicyManager.clearPackagePersistentPreferredActivities(adminComponent, appContext.packageName)
             Log.i(TAG, "Cleared persistent preferred activities for ${appContext.packageName}")
         }.onFailure { Log.w(TAG, "Error clearing persistent preferred activities: ${it.message}") }
 
-        // 2. Query ALL installed applications on the device
+        // 2. Query ALL installed applications including hidden and uninstalled packages
+        val flags = PackageManager.MATCH_UNINSTALLED_PACKAGES or
+                    PackageManager.GET_META_DATA or
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) PackageManager.MATCH_DISABLED_COMPONENTS else 0
+
         val installedApps = runCatching {
-            pm.getInstalledApplications(PackageManager.GET_META_DATA)
+            pm.getInstalledApplications(flags)
         }.getOrElse {
             Log.e(TAG, "Failed to getInstalledApplications: ${it.message}")
             emptyList()
         }
 
-        val packagesToRestore = installedApps
-            .map { it.packageName }
+        // Combine stored explicit blocked package set AND system queried packages
+        val storedBlocked = SecureStorage.getBlockedPackages(appContext)
+        val queriedPackages = installedApps.map { it.packageName }
+        val packagesToRestore = (storedBlocked + queriedPackages)
             .filter { it != appContext.packageName }
+            .toSet()
 
-        Log.i(TAG, "Found ${packagesToRestore.size} installed packages to inspect & restore.")
+        Log.i(TAG, "Found ${packagesToRestore.size} packages to restore (stored=${storedBlocked.size}, queried=${queriedPackages.size}).")
 
-        // 3. Unhide all non-whitelisted and user apps unconditionally
+        // 3. Unhide all packages unconditionally
         var unhiddenCount = 0
         packagesToRestore.forEach { pkg ->
             runCatching {
@@ -100,13 +111,13 @@ object KioskRestoreManager {
                 Log.w(TAG, "Failed to unhide $pkg: ${it.message}")
             }
         }
-        Log.i(TAG, "Successfully processed unhiding for $unhiddenCount applications.")
+        Log.i(TAG, "Successfully processed unhiding for $unhiddenCount / ${packagesToRestore.size} applications.")
 
-        // 4. Unsuspend all packages in bulk
+        // 4. Unsuspend all packages in bulk and individually
         val packagesToUnsuspend = packagesToRestore.toTypedArray()
         runCatching {
             val failed = devicePolicyManager.setPackagesSuspended(adminComponent, packagesToUnsuspend, false)
-            val failedCount = failed.size
+            val failedCount = failed?.size ?: 0
             Log.i(TAG, "setPackagesSuspended(false) executed. Failed list count: $failedCount")
         }.onFailure {
             Log.w(TAG, "Bulk unsuspend failed: ${it.message}. Attempting per-package unsuspend.")
@@ -159,6 +170,7 @@ object KioskRestoreManager {
         // 8. Update persistent secure state
         SecureStorage.putBoolean(appContext, SecureStorage.KEY_LOCK_ACTIVE, false)
         SecureStorage.setSetupCompleted(appContext, false)
+        SecureStorage.setBlockedPackages(appContext, emptySet())
 
         // Cancel scheduled fail-safe workers and alarms
         cancelScheduledFailSafe(appContext)
@@ -252,16 +264,6 @@ object KioskRestoreManager {
         if (now >= unlockTs) {
             Log.i(TAG, "Focus lock timer has EXPIRED. Triggering restoreAllApps.")
             restoreAllApps(appContext)
-        }
-    }
-
-    /**
-     * Fail-safe BroadcastReceiver called when AlarmManager fires.
-     */
-    class FailSafeRestoreReceiver : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            Log.i(TAG, "FailSafeRestoreReceiver received action: ${intent.action}")
-            checkAndRestoreIfExpired(context)
         }
     }
 
