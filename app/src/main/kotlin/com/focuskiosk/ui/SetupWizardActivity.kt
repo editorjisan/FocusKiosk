@@ -14,6 +14,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import com.focuskiosk.databinding.ActivitySetupWizardBinding
 import com.focuskiosk.launcher.AppInfo
 import com.focuskiosk.launcher.HomeLauncherActivity
+import com.focuskiosk.policy.KioskRestoreManager
 import com.focuskiosk.policy.PolicyEnforcer
 import com.focuskiosk.storage.SecureStorage
 import com.focuskiosk.updater.MediaPurgeWorker
@@ -102,6 +103,21 @@ class SetupWizardActivity : AppCompatActivity() {
 
         // Schedule the media purge worker (silent, background).
         MediaPurgeWorker.schedule(this)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        val sp = getSharedPreferences("focus_kiosk_prefs", android.content.Context.MODE_PRIVATE)
+        val epochTime = sp.getLong("unlock_epoch_time", 0L)
+        val secureTs = SecureStorage.getUnlockTimestampMs(this)
+        val unlockEpoch = if (epochTime > 0L) epochTime else secureTs
+        val isLocked = sp.getBoolean("lock_active", false) || SecureStorage.isLockActive(this)
+
+        if (isLocked && unlockEpoch in 1..System.currentTimeMillis()) {
+            Log.i("SetupWizard", "Unlock timestamp reached on resume ($unlockEpoch <= ${System.currentTimeMillis()}) — restoring apps.")
+            KioskRestoreManager.restoreAllApps(this)
+            loadApps()
+        }
     }
 
     // --  App list  ------------------------------------------------------------

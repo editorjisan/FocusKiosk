@@ -1,8 +1,10 @@
 package com.focuskiosk.service
 
 import android.app.*
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
@@ -12,21 +14,15 @@ import androidx.core.app.NotificationCompat
 import com.focuskiosk.R
 import com.focuskiosk.policy.KioskRestoreManager
 import com.focuskiosk.storage.SecureStorage
-import kotlinx.coroutines.*
-import java.util.Locale
-import java.util.concurrent.TimeUnit
 
 /**
  * FocusCountdownService
  * ─────────────────────
- * Lightweight sticky Foreground Service that runs during active focus lock.
+ * Sticky Foreground Service that maintains lock persistence with ZERO CPU usage.
  *
- * Purposes:
- *  1. Holds an ongoing, low-priority notification showing the exact time remaining.
- *  2. Prevents OEM task killers (such as Infinix XOS, Xiaomi MIUI, Samsung OneUI)
- *     from killing the app or ignoring background alarms.
- *  3. When the countdown reaches 0, directly executes [KioskRestoreManager.restoreAllApps]
- *     and stops itself.
+ * Visual countdown is handled 100% natively by Android SystemUI via [NotificationCompat.Builder.setUsesChronometer]
+ * and [NotificationCompat.Builder.setChronometerCountDown].
+ * No while-loops, no coroutines, no ticking alarms — preventing Infinix XOS CPU freeze.
  */
 class FocusCountdownService : Service() {
 
@@ -63,12 +59,10 @@ class FocusCountdownService : Service() {
         }
     }
 
-    private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
-    private var countdownJob: Job? = null
     private var unlockTimestampMs: Long = 0L
     private var wakeLock: PowerManager.WakeLock? = null
 
-    private val screenReceiver = object : android.content.BroadcastReceiver() {
+    private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(ctx: Context?, intent: Intent?) {
             Log.d(TAG, "screenReceiver action: ${intent?.action}")
             ctx?.let { KioskRestoreManager.checkAndRestoreIfExpired(it) }
@@ -83,23 +77,23 @@ class FocusCountdownService : Service() {
 
         // Register dynamic screen-on and user-present receiver
         runCatching {
-            val filter = android.content.IntentFilter().apply {
+            val filter = IntentFilter().apply {
                 addAction(Intent.ACTION_SCREEN_ON)
                 addAction(Intent.ACTION_SCREEN_OFF)
                 addAction(Intent.ACTION_USER_PRESENT)
             }
             registerReceiver(screenReceiver, filter)
-            Log.i(TAG, "Registered screenReceiver for SCREEN_ON and USER_PRESENT.")
+            Log.i(TAG, "Registered screenReceiver for SCREEN_ON, SCREEN_OFF, and USER_PRESENT.")
         }.onFailure { Log.w(TAG, "Failed to register screenReceiver: ${it.message}") }
 
-        // Acquire Partial WakeLock to prevent Infinix aggressive battery optimization from suspending countdown
+        // Acquire Partial WakeLock to safeguard background state
         runCatching {
             val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
             wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "FocusKiosk:CountdownWakeLock").apply {
                 setReferenceCounted(false)
-                acquire(24 * 60 * 60 * 1000L) // 24-hour safeguard maximum
+                acquire(24 * 60 * 60 * 1000L)
             }
-            Log.i(TAG, "Acquired PARTIAL_WAKE_LOCK for FocusCountdownService.")
+            Log.i(TAG, "Acquired PARTIAL_WAKE_LOCK.")
         }.onFailure { Log.w(TAG, "Failed to acquire WakeLock: ${it.message}") }
     }
 
@@ -115,9 +109,16 @@ class FocusCountdownService : Service() {
 
         Log.i(TAG, "onStartCommand: unlockTimestampMs=$unlockTimestampMs")
 
-        // Immediately start foreground with high-priority sticky notification
-        val initialRemaining = (unlockTimestampMs - System.currentTimeMillis()).coerceAtLeast(0L)
-        val notification = buildNotification(formatRemainingTime(initialRemaining))
+        // Check if already expired
+        if (unlockTimestampMs in 1..System.currentTimeMillis()) {
+            Log.i(TAG, "Timestamp already reached. Restoring apps immediately.")
+            KioskRestoreManager.restoreAllApps(this)
+            stopSelf()
+            return START_NOT_STICKY
+        }
+
+        // Build NATIVE Android Chronometer Notification (Zero CPU usage)
+        val notification = buildChronometerNotification(unlockTimestampMs)
 
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
@@ -125,61 +126,27 @@ class FocusCountdownService : Service() {
             } else {
                 startForeground(NOTIFICATION_ID, notification)
             }
-            Log.i(TAG, "startForeground succeeded with FOREGROUND_SERVICE_TYPE_SPECIAL_USE.")
+            Log.i(TAG, "startForeground succeeded with native chronometer (when=$unlockTimestampMs).")
         } catch (e: Exception) {
             Log.e(TAG, "startForeground failed: ${e.message}", e)
         }
 
-        startCountdown()
-
         return START_STICKY
     }
 
-    private fun startCountdown() {
-        countdownJob?.cancel()
-        countdownJob = serviceScope.launch {
-            while (isActive) {
-                val now = System.currentTimeMillis()
-                val remainingMs = unlockTimestampMs - now
-
-                if (remainingMs <= 0L) {
-                    Log.i(TAG, "Countdown reached 0. Triggering restoration and stopping service.")
-                    updateNotification("Focus lock complete. Restoring apps...")
-                    // Direct restoration
-                    KioskRestoreManager.restoreAllApps(applicationContext)
-                    stopForeground(STOP_FOREGROUND_REMOVE)
-                    stopSelf()
-                    break
-                }
-
-                updateNotification(formatRemainingTime(remainingMs))
-                delay(1000L)
-            }
-        }
-    }
-
-    private fun formatRemainingTime(remainingMs: Long): String {
-        val hours = TimeUnit.MILLISECONDS.toHours(remainingMs)
-        val minutes = TimeUnit.MILLISECONDS.toMinutes(remainingMs) % 60
-        val seconds = TimeUnit.MILLISECONDS.toSeconds(remainingMs) % 60
-        return if (hours > 0) {
-            String.format(Locale.getDefault(), "%02d:%02d:%02d remaining", hours, minutes, seconds)
-        } else {
-            String.format(Locale.getDefault(), "%02d:%02d remaining", minutes, seconds)
-        }
-    }
-
-    private fun updateNotification(timeText: String) {
-        val notification = buildNotification(timeText)
-        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        manager.notify(NOTIFICATION_ID, notification)
-    }
-
-    private fun buildNotification(contentText: String): Notification {
+    /**
+     * Builds a notification that uses Android SystemUI's native chronometer countdown.
+     * SystemUI animates the countdown independently in the status bar/lock screen with zero CPU cycles from this app.
+     */
+    private fun buildChronometerNotification(unlockEpoch: Long): Notification {
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Focus Mode Active")
-            .setContentText(contentText)
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setContentTitle("Focus Lock Active")
+            .setContentText("Focus mode is actively enforced")
+            .setSmallIcon(R.drawable.ic_shield)
+            .setUsesChronometer(true)
+            .setChronometerCountDown(true)
+            .setWhen(unlockEpoch)
+            .setShowWhen(true)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
@@ -195,7 +162,7 @@ class FocusCountdownService : Service() {
                 "Focus Mode Countdown",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "Shows sticky countdown timer while Focus Mode is active"
+                description = "Shows native countdown timer while Focus Mode is active"
                 setShowBadge(false)
                 lockscreenVisibility = Notification.VISIBILITY_PUBLIC
             }
@@ -207,8 +174,6 @@ class FocusCountdownService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         runCatching { unregisterReceiver(screenReceiver) }
-        countdownJob?.cancel()
-        serviceScope.cancel()
         runCatching {
             wakeLock?.let {
                 if (it.isHeld) {

@@ -1,8 +1,8 @@
 {
-  "versionCode": 7,
-  "versionName": "1.0.6",
-  "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.0.6/FocusKiosk.apk",
-  "sha256": "24a227df3298f6d152948494385d4a8a0752c73e79e6478e26f50c613435ffac",
-  "releaseNotes": "Complete timer & countdown engine overhaul: Hardware AlarmManager RTC_WAKEUP, WatchdogReceiver for SCREEN_ON/USER_PRESENT/BOOT, POST_NOTIFICATIONS runtime support, and specialUse foreground service.",
+  "versionCode": 8,
+  "versionName": "1.0.7",
+  "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.0.7/FocusKiosk.apk",
+  "sha256": "c0edd227afb83cee5ad49711c6c8190415116d21c7eef18a76102f3d6372fcad",
+  "releaseNotes": "Native Android Chronometer (zero CPU usage, zero freeze), exact hardware RTC_WAKEUP alarm, and wall-clock epoch check on onResume/unlock.",
   "minSdkVersion": 28
 }
