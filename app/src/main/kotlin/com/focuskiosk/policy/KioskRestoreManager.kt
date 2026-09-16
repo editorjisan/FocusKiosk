@@ -128,6 +128,18 @@ object KioskRestoreManager {
             }
         }
 
+        // 4b. Force XOS Launcher & system launcher cache refresh via PACKAGE_CHANGED broadcast
+        packagesToRestore.forEach { pkg ->
+            runCatching {
+                val packageUri = android.net.Uri.parse("package:$pkg")
+                val refreshIntent = Intent(Intent.ACTION_PACKAGE_CHANGED, packageUri).apply {
+                    putExtra(Intent.EXTRA_DONT_KILL_APP, true)
+                }
+                appContext.sendBroadcast(refreshIntent)
+            }
+        }
+        Log.i(TAG, "Broadcasted ACTION_PACKAGE_CHANGED for ${packagesToRestore.size} packages to force XOS icon refresh.")
+
         // 5. Restore user restrictions
         runCatching {
             devicePolicyManager.clearUserRestriction(adminComponent, UserManager.DISALLOW_INSTALL_APPS)

@@ -253,10 +253,10 @@ object PolicyEnforcer {
             val info = pm.getApplicationInfo(packageName, 0)
             val isSystem = (info.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0
 
-            // If it is a system app, ONLY block if it has a user launcher intent (e.g. YouTube, Browser).
+            // If it is a system app, ONLY block if it has a user launcher intent (e.g. YouTube, Browser) or is Google Search/Lens.
             // Background OS services, framework overlays, and gesture navigation must NEVER be touched!
             if (isSystem) {
-                pm.getLaunchIntentForPackage(packageName) != null
+                pm.getLaunchIntentForPackage(packageName) != null || packageName == "com.google.android.googlequicksearchbox"
             } else {
                 true // All user-installed 3rd party apps can be blocked if not whitelisted
             }
@@ -308,8 +308,12 @@ object PolicyEnforcer {
         }.onFailure { Log.w(TAG, "Failed clearing persistent preferred activities: ${it.message}") }
 
         // All installed packages, filtered through safety check.
+        val flags = PackageManager.MATCH_UNINSTALLED_PACKAGES or
+                    PackageManager.GET_META_DATA or
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) PackageManager.MATCH_DISABLED_COMPONENTS else 0
+
         val allPackages = context.packageManager
-            .getInstalledApplications(PackageManager.GET_META_DATA)
+            .getInstalledApplications(flags)
             .map { it.packageName }
             .filter { isSafeToBlock(context, it) }
 

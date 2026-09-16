@@ -149,7 +149,13 @@ object SilentUpdateManager {
 
     private fun fetchManifest(url: String): UpdateManifest? {
         return runCatching {
-            val request = Request.Builder().url(url).build()
+            val bustUrl = if (url.contains("?")) "$url&nocache=${System.currentTimeMillis()}" else "$url?nocache=${System.currentTimeMillis()}"
+            val request = Request.Builder()
+                .url(bustUrl)
+                .header("Cache-Control", "no-cache, no-store, must-revalidate")
+                .header("Pragma", "no-cache")
+                .header("Expires", "0")
+                .build()
             val response = httpClient.newCall(request).execute()
             if (!response.isSuccessful) {
                 Log.w(TAG, "Failed to fetch manifest. HTTP ${response.code}")

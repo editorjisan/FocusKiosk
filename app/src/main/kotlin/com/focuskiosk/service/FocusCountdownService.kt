@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.focuskiosk.R
@@ -65,12 +66,23 @@ class FocusCountdownService : Service() {
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var countdownJob: Job? = null
     private var unlockTimestampMs: Long = 0L
+    private var wakeLock: PowerManager.WakeLock? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
+
+        // Acquire Partial WakeLock to prevent Infinix aggressive battery optimization from suspending countdown
+        runCatching {
+            val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+            wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "FocusKiosk:CountdownWakeLock").apply {
+                setReferenceCounted(false)
+                acquire(24 * 60 * 60 * 1000L) // 24-hour safeguard maximum
+            }
+            Log.i(TAG, "Acquired PARTIAL_WAKE_LOCK for FocusCountdownService.")
+        }.onFailure { Log.w(TAG, "Failed to acquire WakeLock: ${it.message}") }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -83,7 +95,7 @@ class FocusCountdownService : Service() {
 
         Log.i(TAG, "onStartCommand: unlockTimestampMs=$unlockTimestampMs")
 
-        // Immediately start foreground with initial notification
+        // Immediately start foreground with high-priority sticky notification
         val initialRemaining = (unlockTimestampMs - System.currentTimeMillis()).coerceAtLeast(0L)
         val notification = buildNotification(formatRemainingTime(initialRemaining))
 
@@ -145,8 +157,9 @@ class FocusCountdownService : Service() {
             .setSmallIcon(R.mipmap.ic_launcher)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setCategory(NotificationCompat.CATEGORY_PROGRESS)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .build()
     }
 
@@ -155,10 +168,11 @@ class FocusCountdownService : Service() {
             val channel = NotificationChannel(
                 CHANNEL_ID,
                 "Focus Mode Countdown",
-                NotificationManager.IMPORTANCE_LOW
+                NotificationManager.IMPORTANCE_HIGH
             ).apply {
                 description = "Shows sticky countdown timer while Focus Mode is active"
                 setShowBadge(false)
+                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
             }
             val manager = getSystemService(NotificationManager::class.java)
             manager?.createNotificationChannel(channel)
@@ -169,6 +183,14 @@ class FocusCountdownService : Service() {
         super.onDestroy()
         countdownJob?.cancel()
         serviceScope.cancel()
+        runCatching {
+            wakeLock?.let {
+                if (it.isHeld) {
+                    it.release()
+                    Log.i(TAG, "Released PARTIAL_WAKE_LOCK.")
+                }
+            }
+        }
         Log.i(TAG, "FocusCountdownService destroyed.")
     }
 }

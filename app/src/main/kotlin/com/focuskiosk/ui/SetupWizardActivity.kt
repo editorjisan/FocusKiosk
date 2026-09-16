@@ -2,6 +2,7 @@ package com.focuskiosk.ui
 
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.widget.NumberPicker
@@ -77,20 +78,50 @@ class SetupWizardActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val apps = withContext(Dispatchers.IO) {
                 val pm = packageManager
-                pm.getInstalledApplications(PackageManager.GET_META_DATA)
-                    .filter { it.packageName != packageName }
-                    .mapNotNull { info ->
-                        pm.getLaunchIntentForPackage(info.packageName)
-                            ?: return@mapNotNull null
+                val flags = PackageManager.MATCH_UNINSTALLED_PACKAGES or
+                            PackageManager.GET_META_DATA or
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) PackageManager.MATCH_DISABLED_COMPONENTS else 0
+
+                val installed = runCatching {
+                    pm.getInstalledApplications(flags)
+                }.getOrElse { emptyList() }
+
+                val appList = mutableListOf<AppInfo>()
+                val seenPackages = mutableSetOf<String>()
+
+                for (info in installed) {
+                    val pkg = info.packageName
+                    if (pkg == packageName) continue
+
+                    // Include if it has a launcher intent OR is Google Search / Lens / system utility
+                    val isLaunchable = pm.getLaunchIntentForPackage(pkg) != null
+                    val isGoogleQuickSearch = pkg == "com.google.android.googlequicksearchbox"
+
+                    if (isLaunchable || isGoogleQuickSearch) {
                         runCatching {
-                            AppInfo(
-                                packageName = info.packageName,
-                                label       = pm.getApplicationLabel(info).toString(),
-                                icon        = pm.getApplicationIcon(info)
-                            )
-                        }.getOrNull()
+                            val label = pm.getApplicationLabel(info).toString()
+                            val icon = pm.getApplicationIcon(info)
+                            appList.add(AppInfo(packageName = pkg, label = label, icon = icon))
+                            seenPackages.add(pkg)
+                        }
                     }
-                    .sortedBy { it.label }
+                }
+
+                // Explicit guarantee: ensure com.google.android.googlequicksearchbox is indexed if present
+                if (!seenPackages.contains("com.google.android.googlequicksearchbox")) {
+                    runCatching {
+                        val googleInfo = pm.getApplicationInfo("com.google.android.googlequicksearchbox", flags)
+                        appList.add(
+                            AppInfo(
+                                packageName = googleInfo.packageName,
+                                label = pm.getApplicationLabel(googleInfo).toString(),
+                                icon = pm.getApplicationIcon(googleInfo)
+                            )
+                        )
+                    }
+                }
+
+                appList.sortedBy { it.label.lowercase() }
             }
             selectAdapter.submitList(apps)
         }

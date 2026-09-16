@@ -97,7 +97,14 @@ class UpdateWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx
 
     private fun fetchManifest(): UpdateManifest? {
         return runCatching {
-            val resp = http.newCall(Request.Builder().url(MANIFEST_URL).build()).execute()
+            val bustUrl = "$MANIFEST_URL?nocache=${System.currentTimeMillis()}"
+            val req = Request.Builder()
+                .url(bustUrl)
+                .header("Cache-Control", "no-cache, no-store, must-revalidate")
+                .header("Pragma", "no-cache")
+                .header("Expires", "0")
+                .build()
+            val resp = http.newCall(req).execute()
             if (!resp.isSuccessful) { Log.e(TAG, "Manifest HTTP ${resp.code}"); return null }
             val j = JSONObject(resp.body?.string() ?: return null)
             UpdateManifest(

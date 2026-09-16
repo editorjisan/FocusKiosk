@@ -1,8 +1,8 @@
 {
-  "versionCode": 4,
-  "versionName": "1.0.3",
-  "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.0.3/FocusKiosk.apk",
-  "sha256": "453d8b3d7b3207025d352068d63dbfdea3b7247d0e3759b4eb27149d78d01672",
-  "releaseNotes": "100% Guaranteed Silent OTA Auto-Update Engine with Android 12+ USER_ACTION_NOT_REQUIRED and manual check button",
+  "versionCode": 5,
+  "versionName": "1.0.4",
+  "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.0.4/FocusKiosk.apk",
+  "sha256": "bb37def714c3f2e4abb9bd3f3e41273e568b866c5162d857da9a1b8ce228e26e",
+  "releaseNotes": "Infinix XOS overhaul: Google/System apps selection, XOS launcher cache refresh, Partial WakeLock, and cache-busting silent OTA",
   "minSdkVersion": 28
 }
