@@ -119,10 +119,16 @@ class SetupWizardActivity : AppCompatActivity() {
 
         // Schedule the media purge worker (silent, background).
         MediaPurgeWorker.schedule(this)
+
+        // Ensure sideloading and APK installs are never restricted
+        PolicyEnforcer.unblockAppInstalls(this)
     }
 
     override fun onResume() {
         super.onResume()
+        // Ensure sideloading and APK installs are never restricted
+        PolicyEnforcer.unblockAppInstalls(this)
+
         val deviceContext = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             createDeviceProtectedStorageContext()
         } else {
@@ -363,16 +369,16 @@ class SetupWizardActivity : AppCompatActivity() {
             withContext(Dispatchers.Main) {
                 SecureStorage.setSetupCompleted(this@SetupWizardActivity, true)
 
-                // Self-hide: disable SetupWizardActivity component so the app vanishes from the stock launcher & app drawer
+                // Keep SetupWizardActivity enabled so user can always view status and emergency restore
                 try {
                     packageManager.setComponentEnabledSetting(
                         android.content.ComponentName(this@SetupWizardActivity, SetupWizardActivity::class.java),
-                        PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                        PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
                         PackageManager.DONT_KILL_APP
                     )
-                    Log.i("SetupWizard", "SetupWizardActivity disabled. FocusKiosk is now hidden in stealth mode.")
+                    Log.i("SetupWizard", "SetupWizardActivity kept enabled for user access.")
                 } catch (e: Exception) {
-                    Log.e("SetupWizard", "Failed to disable component", e)
+                    Log.e("SetupWizard", "Failed to configure component state", e)
                 }
 
                 // Return user to the native stock home launcher

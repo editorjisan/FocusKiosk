@@ -22,7 +22,15 @@ class FailSafeRestoreReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
         Log.i(TAG, "FailSafeRestoreReceiver received action: ${intent.action}")
-        // Hardware alarm triggered: unconditionally restore all apps
+
+        // 1. Immediately stop countdown service and cancel notification to prevent negative timer
+        runCatching {
+            com.focuskiosk.service.FocusCountdownService.stop(context)
+            val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+            nm.cancel(com.focuskiosk.service.FocusCountdownService.NOTIFICATION_ID)
+        }
+
+        // 2. Hardware alarm triggered: unconditionally restore all apps
         KioskRestoreManager.restoreAllApps(context)
     }
 }

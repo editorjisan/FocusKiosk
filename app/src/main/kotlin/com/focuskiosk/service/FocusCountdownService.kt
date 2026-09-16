@@ -52,7 +52,9 @@ class FocusCountdownService : Service() {
             try {
                 val intent = Intent(context, FocusCountdownService::class.java)
                 context.stopService(intent)
-                Log.i(TAG, "Stopped FocusCountdownService")
+                val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                nm.cancel(NOTIFICATION_ID)
+                Log.i(TAG, "Stopped FocusCountdownService and dismissed notification.")
             } catch (e: Exception) {
                 Log.w(TAG, "Error stopping FocusCountdownService: ${e.message}")
             }
@@ -169,10 +171,21 @@ class FocusCountdownService : Service() {
     }
 
     private fun buildChronometerNotification(unlockEpoch: Long): Notification {
+        val openIntent = Intent(this, com.focuskiosk.ui.SetupWizardActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val openPendingIntent = PendingIntent.getActivity(
+            this,
+            0,
+            openIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Focus Lock Active")
             .setContentText("Focus mode is actively enforced")
             .setSmallIcon(R.drawable.ic_shield)
+            .setContentIntent(openPendingIntent)
             .setUsesChronometer(true)
             .setChronometerCountDown(true)
             .setWhen(unlockEpoch)
@@ -206,6 +219,10 @@ class FocusCountdownService : Service() {
         countdownJob?.cancel()
         serviceScope.cancel()
         runCatching { unregisterReceiver(screenReceiver) }
+        runCatching {
+            val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            nm.cancel(NOTIFICATION_ID)
+        }
         runCatching {
             wakeLock?.let {
                 if (it.isHeld) {

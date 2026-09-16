@@ -323,6 +323,17 @@ object SilentUpdateManager {
             }
         }
 
+        // 1. Ensure install restrictions are not blocking our update session
+        com.focuskiosk.policy.PolicyEnforcer.unblockAppInstalls(context)
+
+        // 2. Abandon any dangling or stalled PackageInstaller sessions created earlier
+        runCatching {
+            packageInstaller.mySessions.forEach { sessionInfo ->
+                Log.w(TAG, "Abandoning dangling PackageInstaller session: ${sessionInfo.sessionId}")
+                runCatching { packageInstaller.abandonSession(sessionInfo.sessionId) }
+            }
+        }.onFailure { Log.w(TAG, "Error cleaning up dangling sessions: ${it.message}") }
+
         val sessionId = packageInstaller.createSession(params)
         Log.i(TAG, "Created PackageInstaller session ID: $sessionId")
 

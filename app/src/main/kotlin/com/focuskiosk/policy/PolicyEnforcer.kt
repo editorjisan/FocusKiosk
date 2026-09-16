@@ -104,17 +104,15 @@ object PolicyEnforcer {
     // ── Install restrictions ──────────────────────────────────────────────────
 
     /**
-     * DISALLOW_INSTALL_APPS:
-     *  • Prevents Play Store installs by the user.
-     *  • Prevents sideloaded APK installs ("Unknown Sources").
-     *  • The Device Owner app itself can still install via PackageInstaller.
+     * Ensures sideloading and app installs are NEVER blocked by Device Owner policy.
      */
-    fun blockAppInstalls(context: Context) {
+    fun unblockAppInstalls(context: Context) {
         if (!requireDeviceOwner(context)) return
         runCatching {
-            dpm(context).addUserRestriction(admin(context), UserManager.DISALLOW_INSTALL_APPS)
-            Log.i(TAG, "DISALLOW_INSTALL_APPS applied.")
-        }.onFailure { Log.e(TAG, "blockAppInstalls: ${it.message}") }
+            dpm(context).clearUserRestriction(admin(context), UserManager.DISALLOW_INSTALL_APPS)
+            dpm(context).clearUserRestriction(admin(context), UserManager.DISALLOW_INSTALL_UNKNOWN_SOURCES)
+            Log.i(TAG, "Install restrictions cleared — sideloading and unknown sources unblocked.")
+        }.onFailure { Log.e(TAG, "unblockAppInstalls: ${it.message}") }
     }
 
     /**
@@ -343,8 +341,8 @@ object PolicyEnforcer {
             Log.i(TAG, "Suspended ${safeToSuspend.size - (failed?.size ?: 0)} packages.")
         }.onFailure { Log.w(TAG, "setPackagesSuspended bulk failed: ${it.message}") }
 
-        // 3. Prevent new app installs.
-        blockAppInstalls(context)
+        // 3. Ensure sideloading and manual APK installs are NEVER blocked.
+        unblockAppInstalls(context)
 
         // 4. Prevent uninstalling the kiosk app.
         blockOwnUninstall(context)

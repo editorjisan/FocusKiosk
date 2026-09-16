@@ -1,8 +1,8 @@
 {
-  "versionCode": 9,
-  "versionName": "1.0.8",
-  "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.0.8/FocusKiosk.apk",
-  "sha256": "2070bd5b15f36a2b16f40553896e05a1e4d7ee0f579f77bae46ce4de8a2454cc",
-  "releaseNotes": "Fix negative chronometer countdown loop with immediate termination at 00:00, and recurring hardware-backed silent background OTA checks.",
+  "versionCode": 10,
+  "versionName": "1.0.9",
+  "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.0.9/FocusKiosk.apk",
+  "sha256": "d136ccfd75b5b1a87a529e6fe65aa207abf1e98c0febc44e3780ea3154869910",
+  "releaseNotes": "Fix negative chronometer countdown with active loop termination, unblock sideloading/install restrictions, AlarmClockInfo fail-safe, and clean dangling PackageInstaller sessions.",
   "minSdkVersion": 28
 }

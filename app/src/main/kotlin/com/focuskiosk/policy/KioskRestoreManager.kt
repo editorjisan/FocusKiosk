@@ -140,14 +140,21 @@ object KioskRestoreManager {
             Log.w(TAG, "Failed to launch home intent: ${e.message}")
         }
 
-        // 5. Restore user restrictions
+        // 5. Restore user restrictions (unblock all installs, ADB, factory reset, unknown sources)
         runCatching {
             devicePolicyManager.clearUserRestriction(adminComponent, UserManager.DISALLOW_INSTALL_APPS)
+            devicePolicyManager.clearUserRestriction(adminComponent, UserManager.DISALLOW_INSTALL_UNKNOWN_SOURCES)
             devicePolicyManager.clearUserRestriction(adminComponent, UserManager.DISALLOW_DEBUGGING_FEATURES)
             devicePolicyManager.clearUserRestriction(adminComponent, UserManager.DISALLOW_FACTORY_RESET)
             devicePolicyManager.clearUserRestriction(adminComponent, UserManager.DISALLOW_APPS_CONTROL)
-            Log.i(TAG, "All anti-tamper and install restrictions cleared.")
+            Log.i(TAG, "All anti-tamper, sideloading, and install restrictions cleared.")
         }.onFailure { Log.w(TAG, "Error clearing user restrictions: ${it.message}") }
+
+        // Cancel countdown notification immediately
+        runCatching {
+            val nm = appContext.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+            nm.cancel(FocusCountdownService.NOTIFICATION_ID)
+        }
 
         // 6. Restore LockTask packages / features if applicable
         runCatching {
@@ -232,7 +239,32 @@ object KioskRestoreManager {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val showIntent = Intent(appContext, com.focuskiosk.ui.SetupWizardActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+            val showPendingIntent = PendingIntent.getActivity(
+                appContext,
+                1002,
+                showIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                try {
+                    alarmManager.setAlarmClock(
+                        AlarmManager.AlarmClockInfo(unlockTimestampMs, showPendingIntent),
+                        pendingIntent
+                    )
+                    Log.i(TAG, "Hardware AlarmManager AlarmClockInfo set for $unlockTimestampMs.")
+                } catch (e: Exception) {
+                    Log.w(TAG, "setAlarmClock failed (${e.message}), falling back to setExactAndAllowWhileIdle")
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, unlockTimestampMs, pendingIntent)
+                    } else {
+                        alarmManager.setExact(AlarmManager.RTC_WAKEUP, unlockTimestampMs, pendingIntent)
+                    }
+                }
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 alarmManager.setExactAndAllowWhileIdle(
                     AlarmManager.RTC_WAKEUP,
                     unlockTimestampMs,
@@ -245,7 +277,7 @@ object KioskRestoreManager {
                     pendingIntent
                 )
             }
-            Log.i(TAG, "Hardware AlarmManager exact wake-up alarm set for $unlockTimestampMs (code 1001).")
+            Log.i(TAG, "Hardware AlarmManager wake-up alarm set for $unlockTimestampMs (code 1001).")
         }.onFailure { Log.e(TAG, "AlarmManager schedule failed: ${it.message}", it) }
 
         // 2. WorkManager fail-safe
