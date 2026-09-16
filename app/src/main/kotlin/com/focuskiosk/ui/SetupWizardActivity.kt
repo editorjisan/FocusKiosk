@@ -38,12 +38,45 @@ class SetupWizardActivity : AppCompatActivity() {
     private lateinit var binding: ActivitySetupWizardBinding
     private lateinit var selectAdapter: AppSelectAdapter
 
+    private val requestNotificationPermissionLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        Log.i("SetupWizard", "POST_NOTIFICATIONS granted: $isGranted")
+    }
+
+    private fun ensureNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            // First auto-grant silently via DevicePolicyManager as Device Owner
+            runCatching {
+                val dpm = getSystemService(android.app.admin.DevicePolicyManager::class.java)
+                dpm?.setPermissionGrantState(
+                    com.focuskiosk.admin.FocusDeviceAdminReceiver.getComponentName(this),
+                    packageName,
+                    android.Manifest.permission.POST_NOTIFICATIONS,
+                    android.app.admin.DevicePolicyManager.PERMISSION_GRANT_STATE_GRANTED
+                )
+                Log.i("SetupWizard", "Auto-granted POST_NOTIFICATIONS via DPM")
+            }.onFailure { Log.w("SetupWizard", "DPM auto-grant POST_NOTIFICATIONS: ${it.message}") }
+
+            // If still not granted, request via runtime prompt
+            if (androidx.core.content.ContextCompat.checkSelfPermission(
+                    this,
+                    android.Manifest.permission.POST_NOTIFICATIONS
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                requestNotificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivitySetupWizardBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
         if (!PolicyEnforcer.isDeviceOwner(this)) { showOwnerError(); return }
+
+        ensureNotificationPermission()
 
         setupList()
         setupDurationPickers()
@@ -215,6 +248,7 @@ class SetupWizardActivity : AppCompatActivity() {
     // --  Confirm & apply  ----------------------------------------------------
 
     private fun confirmActivation() {
+        ensureNotificationPermission()
         val durationMs = selectedDurationMs()
         if (durationMs <= 0L) {
             Toast.makeText(this, "Please select a lock duration.", Toast.LENGTH_LONG).show()
@@ -259,6 +293,12 @@ class SetupWizardActivity : AppCompatActivity() {
             binding.switchFactoryReset.isChecked)
         SecureStorage.putBoolean(this, SecureStorage.KEY_BLOCK_USB_DEBUGGING,
             binding.switchUsbDebugging.isChecked)
+
+        // Save directly to unencrypted SharedPreferences for instant access by Watchdog & AlarmManager
+        getSharedPreferences("focus_kiosk_prefs", android.content.Context.MODE_PRIVATE).edit()
+            .putLong("unlock_epoch_time", unlockTs)
+            .putBoolean("lock_active", true)
+            .apply()
 
         // 2. Safe background execution
         lifecycleScope.launch(Dispatchers.IO) {

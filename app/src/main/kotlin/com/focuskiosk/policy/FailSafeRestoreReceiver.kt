@@ -17,10 +17,12 @@ class FailSafeRestoreReceiver : BroadcastReceiver() {
 
     companion object {
         private const val TAG = "FailSafeRestoreReceiver"
+        const val ACTION_RESTORE_FAILSAFE = "com.focuskiosk.ACTION_RESTORE_FAILSAFE"
     }
 
     override fun onReceive(context: Context, intent: Intent) {
         Log.i(TAG, "FailSafeRestoreReceiver received action: ${intent.action}")
-        KioskRestoreManager.checkAndRestoreIfExpired(context)
+        // Hardware alarm triggered: unconditionally restore all apps
+        KioskRestoreManager.restoreAllApps(context)
     }
 }

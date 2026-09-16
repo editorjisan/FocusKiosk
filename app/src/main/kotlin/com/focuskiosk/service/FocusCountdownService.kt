@@ -68,11 +68,29 @@ class FocusCountdownService : Service() {
     private var unlockTimestampMs: Long = 0L
     private var wakeLock: PowerManager.WakeLock? = null
 
+    private val screenReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(ctx: Context?, intent: Intent?) {
+            Log.d(TAG, "screenReceiver action: ${intent?.action}")
+            ctx?.let { KioskRestoreManager.checkAndRestoreIfExpired(it) }
+        }
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
+
+        // Register dynamic screen-on and user-present receiver
+        runCatching {
+            val filter = android.content.IntentFilter().apply {
+                addAction(Intent.ACTION_SCREEN_ON)
+                addAction(Intent.ACTION_SCREEN_OFF)
+                addAction(Intent.ACTION_USER_PRESENT)
+            }
+            registerReceiver(screenReceiver, filter)
+            Log.i(TAG, "Registered screenReceiver for SCREEN_ON and USER_PRESENT.")
+        }.onFailure { Log.w(TAG, "Failed to register screenReceiver: ${it.message}") }
 
         // Acquire Partial WakeLock to prevent Infinix aggressive battery optimization from suspending countdown
         runCatching {
@@ -87,10 +105,12 @@ class FocusCountdownService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val extraTs = intent?.getLongExtra(EXTRA_UNLOCK_TIMESTAMP, 0L) ?: 0L
-        if (extraTs > 0L) {
-            unlockTimestampMs = extraTs
-        } else {
-            unlockTimestampMs = SecureStorage.getUnlockTimestampMs(this)
+        val spTs = getSharedPreferences("focus_kiosk_prefs", Context.MODE_PRIVATE).getLong("unlock_epoch_time", 0L)
+        val secureTs = SecureStorage.getUnlockTimestampMs(this)
+        unlockTimestampMs = when {
+            extraTs > 0L -> extraTs
+            spTs > 0L -> spTs
+            else -> secureTs
         }
 
         Log.i(TAG, "onStartCommand: unlockTimestampMs=$unlockTimestampMs")
@@ -99,10 +119,15 @@ class FocusCountdownService : Service() {
         val initialRemaining = (unlockTimestampMs - System.currentTimeMillis()).coerceAtLeast(0L)
         val notification = buildNotification(formatRemainingTime(initialRemaining))
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
-        } else {
-            startForeground(NOTIFICATION_ID, notification)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+            } else {
+                startForeground(NOTIFICATION_ID, notification)
+            }
+            Log.i(TAG, "startForeground succeeded with FOREGROUND_SERVICE_TYPE_SPECIAL_USE.")
+        } catch (e: Exception) {
+            Log.e(TAG, "startForeground failed: ${e.message}", e)
         }
 
         startCountdown()
@@ -181,6 +206,7 @@ class FocusCountdownService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        runCatching { unregisterReceiver(screenReceiver) }
         countdownJob?.cancel()
         serviceScope.cancel()
         runCatching {

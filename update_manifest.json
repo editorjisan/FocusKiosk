@@ -1,8 +1,8 @@
 {
-  "versionCode": 6,
-  "versionName": "1.0.5",
-  "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.0.5/FocusKiosk.apk",
-  "sha256": "9b8084b4975f973041837899acc1bc6c6e72ee48b09073092d1329921caca497",
-  "releaseNotes": "Emergency restore button in UI, protected broadcast removal to fix SecurityException crash, robust try-catch unhiding engine.",
+  "versionCode": 7,
+  "versionName": "1.0.6",
+  "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.0.6/FocusKiosk.apk",
+  "sha256": "24a227df3298f6d152948494385d4a8a0752c73e79e6478e26f50c613435ffac",
+  "releaseNotes": "Complete timer & countdown engine overhaul: Hardware AlarmManager RTC_WAKEUP, WatchdogReceiver for SCREEN_ON/USER_PRESENT/BOOT, POST_NOTIFICATIONS runtime support, and specialUse foreground service.",
   "minSdkVersion": 28
 }

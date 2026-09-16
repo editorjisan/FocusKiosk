@@ -184,6 +184,11 @@ object KioskRestoreManager {
         SecureStorage.setSetupCompleted(appContext, false)
         SecureStorage.setBlockedPackages(appContext, emptySet())
 
+        appContext.getSharedPreferences("focus_kiosk_prefs", Context.MODE_PRIVATE).edit()
+            .putLong("unlock_epoch_time", 0L)
+            .putBoolean("lock_active", false)
+            .apply()
+
         // Cancel scheduled fail-safe workers and alarms
         cancelScheduledFailSafe(appContext)
 
@@ -194,7 +199,7 @@ object KioskRestoreManager {
 
     /**
      * Schedules dual fail-safe mechanisms:
-     * 1. Exact AlarmManager intent at [unlockTimestampMs].
+     * 1. Hardware-level AlarmManager setExactAndAllowWhileIdle at [unlockTimestampMs].
      * 2. WorkManager OneTimeWorkRequest with initial delay.
      */
     fun scheduleFailSafe(context: Context, unlockTimestampMs: Long) {
@@ -204,26 +209,34 @@ object KioskRestoreManager {
 
         Log.i(TAG, "Scheduling restoration fail-safe for $unlockTimestampMs (in ${delayMs / 1000}s)")
 
-        // 1. AlarmManager exact trigger
+        // 1. Hardware-level AlarmManager exact wake-up alarm
         runCatching {
-            val am = appContext.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            val alarmManager = appContext.getSystemService(Context.ALARM_SERVICE) as AlarmManager
             val intent = Intent(appContext, FailSafeRestoreReceiver::class.java).apply {
-                action = ACTION_TIMER_EXPIRED
+                action = FailSafeRestoreReceiver.ACTION_RESTORE_FAILSAFE
             }
-            val pi = PendingIntent.getBroadcast(
+            val pendingIntent = PendingIntent.getBroadcast(
                 appContext,
-                9999,
+                1001,
                 intent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, unlockTimestampMs, pi)
+                alarmManager.setExactAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP,
+                    unlockTimestampMs,
+                    pendingIntent
+                )
             } else {
-                am.setExact(AlarmManager.RTC_WAKEUP, unlockTimestampMs, pi)
+                alarmManager.setExact(
+                    AlarmManager.RTC_WAKEUP,
+                    unlockTimestampMs,
+                    pendingIntent
+                )
             }
-            Log.i(TAG, "Exact AlarmManager fail-safe scheduled.")
-        }.onFailure { Log.w(TAG, "AlarmManager schedule failed: ${it.message}") }
+            Log.i(TAG, "Hardware AlarmManager exact wake-up alarm set for $unlockTimestampMs (code 1001).")
+        }.onFailure { Log.e(TAG, "AlarmManager schedule failed: ${it.message}", it) }
 
         // 2. WorkManager fail-safe
         runCatching {
@@ -243,19 +256,19 @@ object KioskRestoreManager {
     fun cancelScheduledFailSafe(context: Context) {
         val appContext = context.applicationContext
         runCatching {
-            val am = appContext.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            val alarmManager = appContext.getSystemService(Context.ALARM_SERVICE) as AlarmManager
             val intent = Intent(appContext, FailSafeRestoreReceiver::class.java).apply {
-                action = ACTION_TIMER_EXPIRED
+                action = FailSafeRestoreReceiver.ACTION_RESTORE_FAILSAFE
             }
-            val pi = PendingIntent.getBroadcast(
+            val pendingIntent = PendingIntent.getBroadcast(
                 appContext,
-                9999,
+                1001,
                 intent,
                 PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
             )
-            if (pi != null) {
-                am.cancel(pi)
-                pi.cancel()
+            if (pendingIntent != null) {
+                alarmManager.cancel(pendingIntent)
+                pendingIntent.cancel()
             }
             WorkManager.getInstance(appContext).cancelUniqueWork(RESTORE_WORK_NAME)
             Log.i(TAG, "Cancelled fail-safe alarms and workers.")
@@ -263,18 +276,23 @@ object KioskRestoreManager {
     }
 
     /**
-     * Validates lock state. If the unlock timestamp has passed, triggers immediate restoration.
+     * Validates lock state against unencrypted SharedPreferences and SecureStorage.
+     * If the unlock timestamp has arrived, triggers immediate restoration.
      */
     fun checkAndRestoreIfExpired(context: Context) {
         val appContext = context.applicationContext
-        if (!SecureStorage.isLockActive(appContext)) return
+        val sp = appContext.getSharedPreferences("focus_kiosk_prefs", Context.MODE_PRIVATE)
+        val epochTime = sp.getLong("unlock_epoch_time", 0L)
+        val secureTs = SecureStorage.getUnlockTimestampMs(appContext)
+        val unlockTs = if (epochTime > 0L) epochTime else secureTs
 
-        val unlockTs = SecureStorage.getUnlockTimestampMs(appContext)
+        val isLockActive = sp.getBoolean("lock_active", false) || SecureStorage.isLockActive(appContext)
+        if (!isLockActive && unlockTs == 0L) return
+
         val now = System.currentTimeMillis()
-
-        Log.d(TAG, "checkAndRestoreIfExpired: now=$now, unlockTs=$unlockTs, expired=${now >= unlockTs}")
-        if (now >= unlockTs) {
-            Log.i(TAG, "Focus lock timer has EXPIRED. Triggering restoreAllApps.")
+        Log.d(TAG, "checkAndRestoreIfExpired: now=$now, unlockTs=$unlockTs, delta=${now - unlockTs}")
+        if (unlockTs in 1..now) {
+            Log.i(TAG, "Focus lock timer has EXPIRED ($now >= $unlockTs). Triggering restoreAllApps immediately.")
             restoreAllApps(appContext)
         }
     }

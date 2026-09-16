@@ -7,7 +7,10 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
@@ -115,14 +118,31 @@
         <service
             android:name=".service.FocusCountdownService"
             android:exported="false"
-            android:foregroundServiceType="dataSync" />
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Countdown timer for kiosk lock" />
+        </service>
 
         <!-- FAIL-SAFE RESTORATION RECEIVER (Exact AlarmManager trigger) -->
         <receiver
             android:name=".policy.FailSafeRestoreReceiver"
-            android:exported="false">
+            android:exported="true">
             <intent-filter>
+                <action android:name="com.focuskiosk.ACTION_RESTORE_FAILSAFE" />
                 <action android:name="com.focuskiosk.policy.ACTION_TIMER_EXPIRED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- WATCHDOG RECEIVER (Immediate restore on screen wake / boot) -->
+        <receiver
+            android:name=".policy.WatchdogReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.USER_PRESENT" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+                <action android:name="android.intent.action.SCREEN_ON" />
             </intent-filter>
         </receiver>
 
