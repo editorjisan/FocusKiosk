@@ -52,6 +52,16 @@ class SetupWizardActivity : AppCompatActivity() {
             android.widget.Toast.makeText(this, "Checking for latest OTA updates...", android.widget.Toast.LENGTH_SHORT).show()
             com.focuskiosk.updater.SilentUpdateManager.triggerImmediateCheck(this)
         }
+        binding.btnEmergencyRestore.setOnClickListener {
+            try {
+                com.focuskiosk.policy.KioskRestoreManager.restoreAllApps(this)
+                android.widget.Toast.makeText(this, "All apps restored successfully", android.widget.Toast.LENGTH_LONG).show()
+                loadApps()
+            } catch (e: Exception) {
+                Log.e("SetupWizard", "Error during emergency restoration", e)
+                android.widget.Toast.makeText(this, "Restoration error: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+            }
+        }
         loadApps()
 
         // Background silent check for updates on setup launch

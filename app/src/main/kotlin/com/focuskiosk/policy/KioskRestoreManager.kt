@@ -100,45 +100,45 @@ object KioskRestoreManager {
 
         Log.i(TAG, "Found ${packagesToRestore.size} packages to restore (stored=${storedBlocked.size}, queried=${queriedPackages.size}).")
 
-        // 3. Unhide all packages unconditionally
+        // 3. Unhide all packages unconditionally with per-package try-catch
         var unhiddenCount = 0
         packagesToRestore.forEach { pkg ->
-            runCatching {
+            try {
                 val success = devicePolicyManager.setApplicationHidden(adminComponent, pkg, false)
                 if (success) unhiddenCount++
                 Log.d(TAG, "setApplicationHidden($pkg, false) -> $success")
-            }.onFailure {
-                Log.w(TAG, "Failed to unhide $pkg: ${it.message}")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to unhide $pkg: ${e.message}", e)
             }
         }
         Log.i(TAG, "Successfully processed unhiding for $unhiddenCount / ${packagesToRestore.size} applications.")
 
         // 4. Unsuspend all packages in bulk and individually
-        val packagesToUnsuspend = packagesToRestore.toTypedArray()
-        runCatching {
-            val failed = devicePolicyManager.setPackagesSuspended(adminComponent, packagesToUnsuspend, false)
-            val failedCount = failed?.size ?: 0
-            Log.i(TAG, "setPackagesSuspended(false) executed. Failed list count: $failedCount")
-        }.onFailure {
-            Log.w(TAG, "Bulk unsuspend failed: ${it.message}. Attempting per-package unsuspend.")
+        try {
+            val failed = devicePolicyManager.setPackagesSuspended(adminComponent, packagesToRestore.toTypedArray(), false)
+            Log.i(TAG, "setPackagesSuspended(false) executed. Failed count: ${failed?.size ?: 0}")
+        } catch (e: Exception) {
+            Log.e(TAG, "Bulk unsuspend failed: ${e.message}. Falling back to per-package unsuspend.", e)
             packagesToRestore.forEach { pkg ->
-                runCatching {
+                try {
                     devicePolicyManager.setPackagesSuspended(adminComponent, arrayOf(pkg), false)
+                } catch (pe: Exception) {
+                    Log.e(TAG, "Per-package unsuspend failed for $pkg: ${pe.message}", pe)
                 }
             }
         }
 
-        // 4b. Force XOS Launcher & system launcher cache refresh via PACKAGE_CHANGED broadcast
-        packagesToRestore.forEach { pkg ->
-            runCatching {
-                val packageUri = android.net.Uri.parse("package:$pkg")
-                val refreshIntent = Intent(Intent.ACTION_PACKAGE_CHANGED, packageUri).apply {
-                    putExtra(Intent.EXTRA_DONT_KILL_APP, true)
-                }
-                appContext.sendBroadcast(refreshIntent)
+        // 4b. Refresh system launcher safely by launching Home Intent (NO protected broadcasts!)
+        try {
+            val homeIntent = Intent(Intent.ACTION_MAIN).apply {
+                addCategory(Intent.CATEGORY_HOME)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
+            appContext.startActivity(homeIntent)
+            Log.i(TAG, "Launched home intent to safely refresh stock launcher.")
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to launch home intent: ${e.message}")
         }
-        Log.i(TAG, "Broadcasted ACTION_PACKAGE_CHANGED for ${packagesToRestore.size} packages to force XOS icon refresh.")
 
         // 5. Restore user restrictions
         runCatching {

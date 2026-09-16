@@ -244,6 +244,18 @@
             android:textSize="14sp"
             android:backgroundTint="#E53935" />
 
+        <!-- Emergency Restore button -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnEmergencyRestore"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginTop="8dp"
+            android:text="EMERGENCY RESTORE APPS"
+            android:textColor="#4CAF50"
+            android:textSize="13sp"
+            app:strokeColor="#4CAF50" />
+
     </LinearLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>
