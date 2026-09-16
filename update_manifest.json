@@ -2,7 +2,7 @@
   "versionCode": 8,
   "versionName": "1.0.7",
   "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.0.7/FocusKiosk.apk",
-  "sha256": "c0edd227afb83cee5ad49711c6c8190415116d21c7eef18a76102f3d6372fcad",
-  "releaseNotes": "Native Android Chronometer (zero CPU usage, zero freeze), exact hardware RTC_WAKEUP alarm, and wall-clock epoch check on onResume/unlock.",
+  "sha256": "d791d816df57a7d74eb2e4284bd5d3bf836513d4dcf3ca6bfe0efedfffef7dd0",
+  "releaseNotes": "DirectBoot-aware boot restoration, visible OTA update engine with live progress, zero-CPU native chronometer, and instant wall-clock onResume recovery.",
   "minSdkVersion": 28
 }

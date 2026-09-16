@@ -177,10 +177,90 @@ object SilentUpdateManager {
         }
     }
 
+    suspend fun checkAndInstallUpdateWithProgress(
+        context: Context,
+        onProgress: (percent: Int, status: String) -> Unit
+    ): Boolean = withContext(Dispatchers.IO) {
+        val appContext = context.applicationContext
+        try {
+            withContext(Dispatchers.Main) { onProgress(0, "Checking GitHub manifest...") }
+            Log.i(TAG, "Checking manifest at: $manifestUrl")
+            val manifest = fetchManifest(manifestUrl)
+            if (manifest == null) {
+                withContext(Dispatchers.Main) { onProgress(0, "Failed to fetch manifest from GitHub.") }
+                return@withContext false
+            }
+
+            val currentVersionCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                appContext.packageManager.getPackageInfo(appContext.packageName, 0).longVersionCode.toInt()
+            } else {
+                @Suppress("DEPRECATION")
+                appContext.packageManager.getPackageInfo(appContext.packageName, 0).versionCode
+            }
+
+            Log.i(TAG, "Current VersionCode: $currentVersionCode | Remote VersionCode: ${manifest.versionCode}")
+
+            if (manifest.versionCode <= currentVersionCode) {
+                withContext(Dispatchers.Main) {
+                    onProgress(100, "Already up to date (v${manifest.versionName}, Build ${manifest.versionCode}).")
+                }
+                return@withContext true
+            }
+
+            withContext(Dispatchers.Main) {
+                onProgress(5, "New version v${manifest.versionName} found! Downloading APK...")
+            }
+
+            val apkFile = downloadApkWithProgress(appContext, manifest.apkUrl, manifest.versionCode) { pct ->
+                CoroutineScope(Dispatchers.Main).launch {
+                    onProgress(pct, "Downloading APK ($pct%)...")
+                }
+            }
+
+            if (apkFile == null) {
+                withContext(Dispatchers.Main) { onProgress(0, "APK download failed!") }
+                return@withContext false
+            }
+
+            if (manifest.sha256.isNotBlank() && !ApkVerifier.verify(apkFile, manifest.sha256)) {
+                withContext(Dispatchers.Main) { onProgress(0, "SHA-256 integrity verification failed!") }
+                apkFile.delete()
+                return@withContext false
+            }
+
+            withContext(Dispatchers.Main) {
+                onProgress(95, "Installing silently via Device Owner...")
+            }
+
+            performSilentInstall(appContext, apkFile)
+
+            withContext(Dispatchers.Main) {
+                onProgress(100, "Installation session committed! App will restart shortly.")
+            }
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking update with progress", e)
+            withContext(Dispatchers.Main) {
+                onProgress(0, "Update error: ${e.message}")
+            }
+            false
+        }
+    }
+
     private fun downloadApk(context: Context, apkUrl: String, versionCode: Int): File? {
+        return downloadApkWithProgress(context, apkUrl, versionCode) {}
+    }
+
+    private fun downloadApkWithProgress(
+        context: Context,
+        apkUrl: String,
+        versionCode: Int,
+        onProgress: (Int) -> Unit
+    ): File? {
         return runCatching {
             val targetDir = context.cacheDir
             val targetFile = File(targetDir, "FocusKiosk_v${versionCode}.apk")
+            if (targetFile.exists()) targetFile.delete()
 
             val request = Request.Builder().url(apkUrl).build()
             val response = httpClient.newCall(request).execute()
@@ -189,9 +269,23 @@ object SilentUpdateManager {
                 return null
             }
 
-            response.body?.byteStream()?.use { input ->
+            val body = response.body ?: return null
+            val contentLength = body.contentLength()
+            var totalBytesRead = 0L
+
+            body.byteStream().use { input ->
                 targetFile.outputStream().use { output ->
-                    input.copyTo(output, 65536)
+                    val buffer = ByteArray(65536)
+                    var bytesRead: Int
+                    while (input.read(buffer).also { bytesRead = it } != -1) {
+                        output.write(buffer, 0, bytesRead)
+                        totalBytesRead += bytesRead
+                        if (contentLength > 0) {
+                            val percent = ((totalBytesRead * 100) / contentLength).toInt().coerceIn(0, 95)
+                            onProgress(percent)
+                        }
+                    }
+                    output.flush()
                 }
             }
             Log.i(TAG, "Downloaded ${targetFile.length()} bytes to ${targetFile.absolutePath}")

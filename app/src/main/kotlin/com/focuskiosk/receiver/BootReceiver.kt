@@ -1,4 +1,4 @@
-package com.focuskiosk.admin
+package com.focuskiosk.receiver
 
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -11,13 +11,16 @@ import com.focuskiosk.service.FocusCountdownService
 import com.focuskiosk.storage.SecureStorage
 
 /**
- * BootReceiver
- * ────────────
- * DirectBoot-aware receiver for com.focuskiosk.admin.BootReceiver.
+ * BootReceiver (DirectBoot-aware)
+ * ───────────────────────────────
+ * Triggered on BOOT_COMPLETED, LOCKED_BOOT_COMPLETED, and QUICKBOOT_POWERON.
+ * If the unlock timestamp has passed or lock is invalid, IMMEDIATELY recovers all apps.
  */
 class BootReceiver : BroadcastReceiver() {
 
-    companion object { private const val TAG = "FocusBootReceiver" }
+    companion object {
+        private const val TAG = "BootReceiver"
+    }
 
     override fun onReceive(context: Context, intent: Intent) {
         val action = intent.action

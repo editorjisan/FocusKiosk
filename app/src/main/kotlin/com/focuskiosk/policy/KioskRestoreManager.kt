@@ -189,6 +189,16 @@ object KioskRestoreManager {
             .putBoolean("lock_active", false)
             .apply()
 
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            runCatching {
+                appContext.createDeviceProtectedStorageContext()
+                    .getSharedPreferences("focus_kiosk_prefs", Context.MODE_PRIVATE).edit()
+                    .putLong("unlock_epoch_time", 0L)
+                    .putBoolean("lock_active", false)
+                    .apply()
+            }
+        }
+
         // Cancel scheduled fail-safe workers and alarms
         cancelScheduledFailSafe(appContext)
 

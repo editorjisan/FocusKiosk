@@ -85,13 +85,28 @@
             </intent-filter>
         </service>
 
-        <!-- BOOT RECEIVER: re-enforces policies after device restart -->
+        <!-- BOOT RECEIVER: DirectBoot-aware restoration after device restart -->
         <receiver
-            android:name=".admin.BootReceiver"
-            android:exported="true">
+            android:name=".receiver.BootReceiver"
+            android:exported="true"
+            android:directBootAware="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
+            android:name=".admin.BootReceiver"
+            android:exported="true"
+            android:directBootAware="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON" />
             </intent-filter>
         </receiver>
 
@@ -127,7 +142,8 @@
         <!-- FAIL-SAFE RESTORATION RECEIVER (Exact AlarmManager trigger) -->
         <receiver
             android:name=".policy.FailSafeRestoreReceiver"
-            android:exported="true">
+            android:exported="true"
+            android:directBootAware="true">
             <intent-filter>
                 <action android:name="com.focuskiosk.ACTION_RESTORE_FAILSAFE" />
                 <action android:name="com.focuskiosk.policy.ACTION_TIMER_EXPIRED" />
@@ -137,7 +153,8 @@
         <!-- WATCHDOG RECEIVER (Immediate restore on screen wake / boot) -->
         <receiver
             android:name=".policy.WatchdogReceiver"
-            android:exported="true">
+            android:exported="true"
+            android:directBootAware="true">
             <intent-filter>
                 <action android:name="android.intent.action.USER_PRESENT" />
                 <action android:name="android.intent.action.BOOT_COMPLETED" />

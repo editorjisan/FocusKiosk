@@ -79,13 +79,29 @@ class SetupWizardActivity : AppCompatActivity() {
 
         ensureNotificationPermission()
 
+        binding.tvVersionInfo.text = "v${com.focuskiosk.BuildConfig.VERSION_NAME} (Build ${com.focuskiosk.BuildConfig.VERSION_CODE})"
+
         setupList()
         setupDurationPickers()
         binding.btnActivateLock.setOnClickListener { confirmActivation() }
+
         binding.btnCheckUpdate.setOnClickListener {
-            android.widget.Toast.makeText(this, "Checking for latest OTA updates...", android.widget.Toast.LENGTH_SHORT).show()
-            com.focuskiosk.updater.SilentUpdateManager.triggerImmediateCheck(this)
+            binding.btnCheckUpdate.isEnabled = false
+            binding.progressBarUpdate.visibility = android.view.View.VISIBLE
+            binding.progressBarUpdate.progress = 0
+            binding.tvUpdateStatus.text = "Connecting to GitHub..."
+
+            lifecycleScope.launch {
+                com.focuskiosk.updater.SilentUpdateManager.checkAndInstallUpdateWithProgress(this@SetupWizardActivity) { percent, statusText ->
+                    binding.progressBarUpdate.progress = percent
+                    binding.tvUpdateStatus.text = statusText
+                    if (percent >= 100 || statusText.startsWith("Already") || statusText.startsWith("Failed") || statusText.startsWith("Error")) {
+                        binding.btnCheckUpdate.isEnabled = true
+                    }
+                }
+            }
         }
+
         binding.btnEmergencyRestore.setOnClickListener {
             try {
                 com.focuskiosk.policy.KioskRestoreManager.restoreAllApps(this)
@@ -107,14 +123,19 @@ class SetupWizardActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        val sp = getSharedPreferences("focus_kiosk_prefs", android.content.Context.MODE_PRIVATE)
+        val deviceContext = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            createDeviceProtectedStorageContext()
+        } else {
+            this
+        }
+        val sp = deviceContext.getSharedPreferences("focus_kiosk_prefs", android.content.Context.MODE_PRIVATE)
         val epochTime = sp.getLong("unlock_epoch_time", 0L)
-        val secureTs = SecureStorage.getUnlockTimestampMs(this)
+        val secureTs = runCatching { SecureStorage.getUnlockTimestampMs(this) }.getOrDefault(0L)
         val unlockEpoch = if (epochTime > 0L) epochTime else secureTs
-        val isLocked = sp.getBoolean("lock_active", false) || SecureStorage.isLockActive(this)
+        val isLocked = sp.getBoolean("lock_active", false) || runCatching { SecureStorage.isLockActive(this) }.getOrDefault(false)
 
         if (isLocked && unlockEpoch in 1..System.currentTimeMillis()) {
-            Log.i("SetupWizard", "Unlock timestamp reached on resume ($unlockEpoch <= ${System.currentTimeMillis()}) — restoring apps.")
+            Log.i("SetupWizard", "Unlock timestamp reached on resume ($unlockEpoch <= ${System.currentTimeMillis()}) — restoring apps immediately!")
             KioskRestoreManager.restoreAllApps(this)
             loadApps()
         }
@@ -315,6 +336,17 @@ class SetupWizardActivity : AppCompatActivity() {
             .putLong("unlock_epoch_time", unlockTs)
             .putBoolean("lock_active", true)
             .apply()
+
+        // Also save to DirectBoot Device Protected Storage so BootReceiver can access before screen unlock
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+            runCatching {
+                createDeviceProtectedStorageContext()
+                    .getSharedPreferences("focus_kiosk_prefs", android.content.Context.MODE_PRIVATE).edit()
+                    .putLong("unlock_epoch_time", unlockTs)
+                    .putBoolean("lock_active", true)
+                    .apply()
+            }
+        }
 
         // 2. Safe background execution
         lifecycleScope.launch(Dispatchers.IO) {
