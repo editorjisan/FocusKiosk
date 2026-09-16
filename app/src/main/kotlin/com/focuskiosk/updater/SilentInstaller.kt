@@ -47,6 +47,9 @@ object SilentInstaller {
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
                 setInstallReason(PackageManager.INSTALL_REASON_POLICY)
             }
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED)
+            }
         }
 
         val sessionId = installer.createSession(params)

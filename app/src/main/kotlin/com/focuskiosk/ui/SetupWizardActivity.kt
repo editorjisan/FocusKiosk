@@ -47,7 +47,14 @@ class SetupWizardActivity : AppCompatActivity() {
         setupList()
         setupDurationPickers()
         binding.btnActivateLock.setOnClickListener { confirmActivation() }
+        binding.btnCheckUpdate.setOnClickListener {
+            android.widget.Toast.makeText(this, "Checking for latest OTA updates...", android.widget.Toast.LENGTH_SHORT).show()
+            com.focuskiosk.updater.SilentUpdateManager.triggerImmediateCheck(this)
+        }
         loadApps()
+
+        // Background silent check for updates on setup launch
+        com.focuskiosk.updater.SilentUpdateManager.triggerImmediateCheck(this)
 
         // Schedule the media purge worker (silent, background).
         MediaPurgeWorker.schedule(this)

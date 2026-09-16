@@ -8,8 +8,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
 import androidx.work.*
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.*
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
@@ -81,6 +80,18 @@ object SilentUpdateManager {
      */
     fun triggerImmediateCheck(context: Context) {
         val appContext = context.applicationContext
+
+        // 1. Direct coroutine trigger - runs immediately on background thread without waiting on WorkManager
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                Log.i(TAG, "Executing immediate background OTA check directly...")
+                checkAndInstallUpdate(appContext)
+            } catch (e: Exception) {
+                Log.e(TAG, "Direct OTA update check failed", e)
+            }
+        }
+
+        // 2. Also enqueue WorkManager job as backup
         val constraints = Constraints.Builder()
             .setRequiredNetworkType(NetworkType.CONNECTED)
             .build()
@@ -90,7 +101,7 @@ object SilentUpdateManager {
             .build()
 
         WorkManager.getInstance(appContext).enqueue(request)
-        Log.i(TAG, "Triggered immediate update check.")
+        Log.i(TAG, "Enqueued WorkManager immediate update check.")
     }
 
     /**
@@ -200,6 +211,10 @@ object SilentUpdateManager {
             setSize(apkFile.length())
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 setInstallReason(PackageManager.INSTALL_REASON_POLICY)
+            }
+            // MANDATORY FOR ZERO-TOUCH ON ANDROID 12+ (API 31+)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED)
             }
         }
 

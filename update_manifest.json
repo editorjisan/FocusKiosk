@@ -1,8 +1,8 @@
 {
-  "versionCode": 3,
-  "versionName": "1.0.2",
-  "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.0.2/FocusKiosk.apk",
-  "sha256": "7f5bc5868315cb478a2d765d4dd2a330da38c24588d8327a2155c43e4db8e36f",
-  "releaseNotes": "Fix hidden app restoration query with MATCH_UNINSTALLED_PACKAGES, add FocusCountdownService, and robust dual fail-safe",
+  "versionCode": 4,
+  "versionName": "1.0.3",
+  "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.0.3/FocusKiosk.apk",
+  "sha256": "453d8b3d7b3207025d352068d63dbfdea3b7247d0e3759b4eb27149d78d01672",
+  "releaseNotes": "100% Guaranteed Silent OTA Auto-Update Engine with Android 12+ USER_ACTION_NOT_REQUIRED and manual check button",
   "minSdkVersion": 28
 }
