@@ -110,14 +110,7 @@
             </intent-filter>
         </receiver>
 
-        <!-- UPDATE INSTALL RESULT RECEIVER -->
-        <receiver
-            android:name=".updater.InstallResultReceiver"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="com.focuskiosk.updater.INSTALL_RESULT" />
-            </intent-filter>
-        </receiver>
+
 
         <!-- SILENT UPDATE RESULT RECEIVER (PackageInstaller commit target & app replaced) -->
         <receiver

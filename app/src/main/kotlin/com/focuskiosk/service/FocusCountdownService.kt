@@ -69,7 +69,24 @@ class FocusCountdownService : Service() {
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(ctx: Context?, intent: Intent?) {
             Log.d(TAG, "screenReceiver action: ${intent?.action}")
-            ctx?.let { KioskRestoreManager.checkAndRestoreIfExpired(it) }
+            val context = ctx ?: return
+            val now = System.currentTimeMillis()
+            if (unlockTimestampMs in 1..now) {
+                Log.i(TAG, "Screen on detected past expiry ($now >= $unlockTimestampMs)! Dismissing notification and restoring.")
+                runCatching {
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                    nm.cancel(NOTIFICATION_ID)
+                }
+                stopSelf()
+                CoroutineScope(Dispatchers.IO).launch {
+                    KioskRestoreManager.restoreAllApps(context)
+                }
+            } else {
+                ctx.let { KioskRestoreManager.checkAndRestoreIfExpired(it) }
+                // Also trigger background OTA check on screen wake
+                com.focuskiosk.updater.SilentUpdateManager.triggerImmediateCheck(context)
+            }
         }
     }
 
@@ -149,12 +166,8 @@ class FocusCountdownService : Service() {
                 val remainingMs = unlockTimestampMs - now
 
                 if (remainingMs <= 0L) {
-                    Log.i(TAG, "Timer expired at 00:00! Triggering full app restoration.")
-                    // 1. Immediately unhide & unsuspend all apps
-                    KioskRestoreManager.restoreAllApps(applicationContext)
-                    SecureStorage.putBoolean(applicationContext, SecureStorage.KEY_LOCK_ACTIVE, false)
-
-                    // 2. Clear notification and terminate service immediately (prevents negative counts)
+                    Log.i(TAG, "Timer expired at 00:00! Dismissing notification and restoring apps.")
+                    // 1. Immediately dismiss notification and stop foreground so negative numbers never show
                     try {
                         stopForeground(STOP_FOREGROUND_REMOVE)
                         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -162,7 +175,15 @@ class FocusCountdownService : Service() {
                     } catch (e: Exception) {
                         Log.w(TAG, "Error clearing notification: ${e.message}")
                     }
+
+                    // 2. Update persistent state and stop service
+                    SecureStorage.putBoolean(applicationContext, SecureStorage.KEY_LOCK_ACTIVE, false)
                     stopSelf()
+
+                    // 3. Trigger complete restoration on background IO thread
+                    CoroutineScope(Dispatchers.IO).launch {
+                        KioskRestoreManager.restoreAllApps(applicationContext)
+                    }
                     break
                 }
                 delay(1000L)

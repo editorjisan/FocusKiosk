@@ -70,8 +70,12 @@ object KioskRestoreManager {
         val devicePolicyManager = dpm(appContext)
         val adminComponent = admin(appContext)
 
-        // 0. Stop the foreground countdown service if active
+        // 0. Stop the foreground countdown service and cancel notification immediately
         FocusCountdownService.stop(appContext)
+        runCatching {
+            val nm = appContext.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+            nm.cancel(FocusCountdownService.NOTIFICATION_ID)
+        }
 
         // 1. Clear any persistent preferred home/launcher activities
         runCatching {

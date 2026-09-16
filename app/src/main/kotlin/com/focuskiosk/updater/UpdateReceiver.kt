@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageInstaller
+import android.os.Build
 import android.util.Log
 
 /**
@@ -59,9 +60,17 @@ class UpdateReceiver : BroadcastReceiver() {
                 cleanupCacheApks(context)
             }
             PackageInstaller.STATUS_PENDING_USER_ACTION -> {
-                Log.w(TAG, "Install requires user action. Ensure app is provisioned as Device Owner. Session: $sessionId")
-                // On non-DO devices, user intent would need to be launched here.
-                // On active DO devices, this branch is never hit.
+                Log.w(TAG, "Install requires user action. Launching confirmation activity. Session: $sessionId")
+                val confirmIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    intent.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)
+                } else {
+                    @Suppress("DEPRECATION")
+                    intent.getParcelableExtra(Intent.EXTRA_INTENT)
+                }
+                confirmIntent?.let {
+                    it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    context.startActivity(it)
+                }
             }
             else -> {
                 Log.e(TAG, "Silent install failed! Status: $status, Message: $message, Session: $sessionId")

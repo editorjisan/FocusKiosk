@@ -19,6 +19,7 @@ import com.focuskiosk.policy.PolicyEnforcer
 import com.focuskiosk.storage.SecureStorage
 import com.focuskiosk.updater.MediaPurgeWorker
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -85,21 +86,12 @@ class SetupWizardActivity : AppCompatActivity() {
         setupDurationPickers()
         binding.btnActivateLock.setOnClickListener { confirmActivation() }
 
-        binding.btnCheckUpdate.setOnClickListener {
-            binding.btnCheckUpdate.isEnabled = false
-            binding.progressBarUpdate.visibility = android.view.View.VISIBLE
-            binding.progressBarUpdate.progress = 0
-            binding.tvUpdateStatus.text = "Connecting to GitHub..."
+        binding.btnCheckUpdate.setOnClickListener { triggerUpdateFlow() }
 
-            lifecycleScope.launch {
-                com.focuskiosk.updater.SilentUpdateManager.checkAndInstallUpdateWithProgress(this@SetupWizardActivity) { percent, statusText ->
-                    binding.progressBarUpdate.progress = percent
-                    binding.tvUpdateStatus.text = statusText
-                    if (percent >= 100 || statusText.startsWith("Already") || statusText.startsWith("Failed") || statusText.startsWith("Error")) {
-                        binding.btnCheckUpdate.isEnabled = true
-                    }
-                }
-            }
+        // Auto-check for updates 1.5 seconds after launch to ensure smooth zero-touch update
+        lifecycleScope.launch {
+            delay(1500L)
+            triggerUpdateFlow()
         }
 
         binding.btnEmergencyRestore.setOnClickListener {
@@ -144,6 +136,23 @@ class SetupWizardActivity : AppCompatActivity() {
             Log.i("SetupWizard", "Unlock timestamp reached on resume ($unlockEpoch <= ${System.currentTimeMillis()}) — restoring apps immediately!")
             KioskRestoreManager.restoreAllApps(this)
             loadApps()
+        }
+    }
+
+    private fun triggerUpdateFlow() {
+        binding.btnCheckUpdate.isEnabled = false
+        binding.progressBarUpdate.visibility = android.view.View.VISIBLE
+        binding.progressBarUpdate.progress = 0
+        binding.tvUpdateStatus.text = "Checking for updates..."
+
+        lifecycleScope.launch {
+            com.focuskiosk.updater.SilentUpdateManager.checkAndInstallUpdateWithProgress(this@SetupWizardActivity) { percent, statusText ->
+                binding.progressBarUpdate.progress = percent
+                binding.tvUpdateStatus.text = statusText
+                if (percent >= 100 || statusText.startsWith("Already") || statusText.startsWith("Failed") || statusText.startsWith("Error")) {
+                    binding.btnCheckUpdate.isEnabled = true
+                }
+            }
         }
     }
 

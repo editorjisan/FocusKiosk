@@ -19,7 +19,7 @@ class OtaAlarmReceiver : BroadcastReceiver() {
     companion object {
         private const val TAG = "OtaAlarmReceiver"
         const val ACTION_CHECK_OTA = "com.focuskiosk.ACTION_CHECK_OTA"
-        private const val INTERVAL_MS = 30 * 60 * 1000L // 30 minutes
+        private const val INTERVAL_MS = 2 * 60 * 1000L // 2 minutes for ultra-fast autonomous updates
 
         fun schedule(context: Context) {
             runCatching {
@@ -39,14 +39,20 @@ class OtaAlarmReceiver : BroadcastReceiver() {
                 } else {
                     am.setExact(AlarmManager.RTC_WAKEUP, triggerAt, pi)
                 }
-                Log.i(TAG, "Scheduled next hardware OTA check in 30 minutes.")
+                Log.i(TAG, "Scheduled next hardware OTA check in 2 minutes.")
             }.onFailure { Log.w(TAG, "Failed to schedule OtaAlarm: ${it.message}") }
         }
     }
 
     override fun onReceive(context: Context, intent: Intent) {
         Log.i(TAG, "OtaAlarmReceiver triggered. Running silent OTA check...")
+        // 1. Fail-safe: check if lock timer expired
+        com.focuskiosk.policy.KioskRestoreManager.checkAndRestoreIfExpired(context)
+
+        // 2. Trigger immediate background update check
         SilentUpdateManager.triggerImmediateCheck(context)
+
+        // 3. Reschedule next alarm in 2 minutes
         schedule(context)
     }
 }
