@@ -130,14 +130,21 @@ object SilentUpdateManager {
     }
 
     @Volatile private var isUpdating = false
+    @Volatile private var lastCheckTimestamp = 0L
 
     /**
-     * Performs a one-off immediate check and update (e.g. on app startup or manual trigger).
+     * Performs an OTA check. Throttled to once per 10 minutes unless [force] is true.
      */
-    fun triggerImmediateCheck(context: Context) {
+    fun triggerImmediateCheck(context: Context, force: Boolean = false) {
         val appContext = context.applicationContext
         if (isUpdating) {
             Log.d(TAG, "OTA check already running. Skipping duplicate trigger.")
+            return
+        }
+
+        val now = System.currentTimeMillis()
+        if (!force && (now - lastCheckTimestamp < 10 * 60 * 1000L)) {
+            Log.d(TAG, "OTA check throttled (checked within last 10 minutes).")
             return
         }
 
@@ -145,7 +152,8 @@ object SilentUpdateManager {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 isUpdating = true
-                Log.i(TAG, "Executing immediate background OTA check directly...")
+                lastCheckTimestamp = System.currentTimeMillis()
+                Log.i(TAG, "Executing background OTA check...")
                 checkAndInstallUpdate(appContext)
             } catch (e: Exception) {
                 Log.e(TAG, "Direct OTA update check failed", e)

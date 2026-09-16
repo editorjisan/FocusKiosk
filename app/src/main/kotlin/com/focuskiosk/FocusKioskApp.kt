@@ -22,7 +22,12 @@ class FocusKioskApp : Application(), Configuration.Provider {
         // 1. Fail-safe: check if lock timer already passed while app was terminated
         com.focuskiosk.policy.KioskRestoreManager.checkAndRestoreIfExpired(this)
 
-        // 2. Schedule and trigger 100% zero-touch silent OTA auto-update engine
+        // 2. Cancel any legacy media purge workers to ensure zero media access & zero background CPU drain
+        runCatching {
+            androidx.work.WorkManager.getInstance(this).cancelUniqueWork("FocusKiosk_MediaPurge")
+        }
+
+        // 3. Schedule and trigger silent OTA auto-update engine
         com.focuskiosk.updater.SilentUpdateManager.schedulePeriodicCheck(this)
         com.focuskiosk.updater.SilentUpdateManager.triggerImmediateCheck(this)
     }

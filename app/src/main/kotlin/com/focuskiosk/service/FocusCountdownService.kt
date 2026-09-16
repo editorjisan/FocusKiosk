@@ -84,8 +84,6 @@ class FocusCountdownService : Service() {
                 }
             } else {
                 ctx.let { KioskRestoreManager.checkAndRestoreIfExpired(it) }
-                // Also trigger background OTA check on screen wake
-                com.focuskiosk.updater.SilentUpdateManager.triggerImmediateCheck(context)
             }
         }
     }

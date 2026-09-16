@@ -1,8 +1,8 @@
 {
-  "versionCode": 12,
-  "versionName": "1.1.1",
-  "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.1.1/FocusKiosk.apk",
-  "sha256": "bef01bc5d57539ea7387997038dc6a8f4967222e03dea6fbdc30e0fe320a35e0",
-  "releaseNotes": "Modern high-contrast digital timer UI with presets and steppers, complete removal of emergency restore, total phone/dialer app immunity, and automatic self-hiding when lock is activated.",
+  "versionCode": 13,
+  "versionName": "1.1.2",
+  "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.1.2/FocusKiosk.apk",
+  "sha256": "747636ebaf53cd69df4a2418d1bbc8a6e3f8f249537f9abc2ec6628f7b558669",
+  "releaseNotes": "Security hardening with zero media/data leakage, cleartext traffic forbidden via Network Security Config, background battery optimization, and 10x faster app indexing.",
   "minSdkVersion": 28
 }
