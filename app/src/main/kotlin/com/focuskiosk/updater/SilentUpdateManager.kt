@@ -43,7 +43,7 @@ object SilentUpdateManager {
     private const val DEFAULT_INTERVAL_HOURS = 4L
 
     // Configurable endpoint (GitHub release manifest, raw JSON gist, or custom server)
-    var manifestUrl: String = "https://raw.githubusercontent.com/jisan/FocusKiosk/main/update_manifest.json"
+    var manifestUrl: String = "https://raw.githubusercontent.com/editorjisan/FocusKiosk/main/update_manifest.json"
 
     private val httpClient = OkHttpClient.Builder()
         .connectTimeout(20, TimeUnit.SECONDS)

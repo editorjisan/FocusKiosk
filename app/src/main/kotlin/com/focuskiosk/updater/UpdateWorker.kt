@@ -28,7 +28,7 @@ class UpdateWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx
     companion object {
         private const val TAG              = "UpdateWorker"
         private const val WORK_NAME        = "FocusKiosk_UpdateCheck"
-        private const val MANIFEST_URL     = "https://raw.githubusercontent.com/jisan/FocusKiosk/main/update_manifest.json"
+        private const val MANIFEST_URL     = "https://raw.githubusercontent.com/editorjisan/FocusKiosk/main/update_manifest.json"
         private const val INTERVAL_HOURS   = 6L
 
         /**
