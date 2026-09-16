@@ -175,116 +175,399 @@
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="16dp"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:paddingTop="12dp"
+        android:paddingBottom="16dp"
         android:background="#1A1A2E"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
-        <!-- Duration label -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Lock Duration"
-            android:textColor="#FFFFFF"
-            android:textSize="14sp"
-            android:textStyle="bold"
-            android:layout_marginBottom="8dp" />
-
-        <!-- Number pickers row -->
+        <!-- Modern Digital Timer Card -->
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="120dp"
-            android:orientation="horizontal"
-            android:gravity="center"
-            android:layout_marginBottom="6dp">
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="#16213E"
+            android:padding="10dp"
+            android:layout_marginBottom="8dp">
 
-            <!-- Years -->
             <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
-                android:orientation="vertical"
-                android:gravity="center">
-                <NumberPicker
-                    android:id="@+id/pickerYears"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="LOCK DURATION"
+                    android:textColor="#00E5FF"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.08" />
+
+                <TextView
+                    android:id="@+id/tvDurationPreview"
                     android:layout_width="wrap_content"
-                    android:layout_height="wrap_content" />
+                    android:layout_height="wrap_content"
+                    android:text="1 min"
+                    android:textColor="#4CAF50"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:fontFamily="monospace" />
+            </LinearLayout>
+
+            <!-- Digital Time Display & Stepper Controls -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center"
+                android:layout_marginTop="6dp"
+                android:layout_marginBottom="2dp">
+
+                <!-- Days Column -->
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:gravity="center">
+
+                    <TextView
+                        android:id="@+id/tvDisplayDays"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="00"
+                        android:textColor="#FFFFFF"
+                        android:textSize="24sp"
+                        android:textStyle="bold"
+                        android:fontFamily="monospace" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="DAYS"
+                        android:textColor="#80FFFFFF"
+                        android:textSize="9sp"
+                        android:letterSpacing="0.05" />
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:layout_marginTop="2dp">
+
+                        <Button
+                            android:id="@+id/btnMinusDay"
+                            style="@style/Widget.MaterialComponents.Button.TextButton"
+                            android:layout_width="32dp"
+                            android:layout_height="32dp"
+                            android:minWidth="0dp"
+                            android:minHeight="0dp"
+                            android:padding="0dp"
+                            android:text="-"
+                            android:textColor="#00E5FF"
+                            android:textSize="18sp" />
+
+                        <Button
+                            android:id="@+id/btnPlusDay"
+                            style="@style/Widget.MaterialComponents.Button.TextButton"
+                            android:layout_width="32dp"
+                            android:layout_height="32dp"
+                            android:minWidth="0dp"
+                            android:minHeight="0dp"
+                            android:padding="0dp"
+                            android:text="+"
+                            android:textColor="#00E5FF"
+                            android:textSize="18sp" />
+                    </LinearLayout>
+                </LinearLayout>
+
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Years"
-                    android:textColor="#AAFFFFFF"
-                    android:textSize="11sp" />
-            </LinearLayout>
+                    android:text=":"
+                    android:textColor="#55FFFFFF"
+                    android:textSize="22sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="16dp" />
 
-            <!-- Days -->
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
-                android:orientation="vertical"
-                android:gravity="center">
-                <NumberPicker
-                    android:id="@+id/pickerDays"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content" />
+                <!-- Hours Column -->
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:gravity="center">
+
+                    <TextView
+                        android:id="@+id/tvDisplayHours"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="00"
+                        android:textColor="#FFFFFF"
+                        android:textSize="24sp"
+                        android:textStyle="bold"
+                        android:fontFamily="monospace" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="HOURS"
+                        android:textColor="#80FFFFFF"
+                        android:textSize="9sp"
+                        android:letterSpacing="0.05" />
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:layout_marginTop="2dp">
+
+                        <Button
+                            android:id="@+id/btnMinusHour"
+                            style="@style/Widget.MaterialComponents.Button.TextButton"
+                            android:layout_width="32dp"
+                            android:layout_height="32dp"
+                            android:minWidth="0dp"
+                            android:minHeight="0dp"
+                            android:padding="0dp"
+                            android:text="-"
+                            android:textColor="#00E5FF"
+                            android:textSize="18sp" />
+
+                        <Button
+                            android:id="@+id/btnPlusHour"
+                            style="@style/Widget.MaterialComponents.Button.TextButton"
+                            android:layout_width="32dp"
+                            android:layout_height="32dp"
+                            android:minWidth="0dp"
+                            android:minHeight="0dp"
+                            android:padding="0dp"
+                            android:text="+"
+                            android:textColor="#00E5FF"
+                            android:textSize="18sp" />
+                    </LinearLayout>
+                </LinearLayout>
+
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Days"
-                    android:textColor="#AAFFFFFF"
-                    android:textSize="11sp" />
-            </LinearLayout>
+                    android:text=":"
+                    android:textColor="#55FFFFFF"
+                    android:textSize="22sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="16dp" />
 
-            <!-- Hours -->
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
-                android:orientation="vertical"
-                android:gravity="center">
-                <NumberPicker
-                    android:id="@+id/pickerHours"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content" />
-                <TextView
-                    android:layout_width="wrap_content"
+                <!-- Minutes Column -->
+                <LinearLayout
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:text="Hours"
-                    android:textColor="#AAFFFFFF"
-                    android:textSize="11sp" />
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:gravity="center">
+
+                    <TextView
+                        android:id="@+id/tvDisplayMinutes"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="01"
+                        android:textColor="#00E5FF"
+                        android:textSize="24sp"
+                        android:textStyle="bold"
+                        android:fontFamily="monospace" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="MINUTES"
+                        android:textColor="#80FFFFFF"
+                        android:textSize="9sp"
+                        android:letterSpacing="0.05" />
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:layout_marginTop="2dp">
+
+                        <Button
+                            android:id="@+id/btnMinusMinute"
+                            style="@style/Widget.MaterialComponents.Button.TextButton"
+                            android:layout_width="32dp"
+                            android:layout_height="32dp"
+                            android:minWidth="0dp"
+                            android:minHeight="0dp"
+                            android:padding="0dp"
+                            android:text="-"
+                            android:textColor="#00E5FF"
+                            android:textSize="18sp" />
+
+                        <Button
+                            android:id="@+id/btnPlusMinute"
+                            style="@style/Widget.MaterialComponents.Button.TextButton"
+                            android:layout_width="32dp"
+                            android:layout_height="32dp"
+                            android:minWidth="0dp"
+                            android:minHeight="0dp"
+                            android:padding="0dp"
+                            android:text="+"
+                            android:textColor="#00E5FF"
+                            android:textSize="18sp" />
+                    </LinearLayout>
+                </LinearLayout>
             </LinearLayout>
 
-            <!-- Minutes -->
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
-                android:orientation="vertical"
-                android:gravity="center">
-                <NumberPicker
-                    android:id="@+id/pickerMinutes"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content" />
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Minutes"
-                    android:textColor="#AAFFFFFF"
-                    android:textSize="11sp" />
-            </LinearLayout>
-
+            <!-- Unlock summary line -->
+            <TextView
+                android:id="@+id/tvUnlockTimestampPreview"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:text="Unlocks at: 12:00 AM"
+                android:textColor="#90CAF9"
+                android:textSize="11sp" />
         </LinearLayout>
 
-        <!-- Duration preview -->
-        <TextView
-            android:id="@+id/tvDurationPreview"
-            android:layout_width="wrap_content"
+        <!-- Quick Presets Horizontal Scroll -->
+        <HorizontalScrollView
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textColor="#66FFFFFF"
-            android:textSize="12sp"
-            android:layout_marginBottom="10dp" />
+            android:scrollbars="none"
+            android:layout_marginBottom="8dp">
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/chipPreset1m"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="34dp"
+                    android:layout_marginEnd="6dp"
+                    android:text="1 min"
+                    android:textColor="#00E5FF"
+                    android:textSize="11sp"
+                    app:strokeColor="#00E5FF" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/chipPreset2m"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="34dp"
+                    android:layout_marginEnd="6dp"
+                    android:text="2 min"
+                    android:textColor="#FFFFFF"
+                    android:textSize="11sp"
+                    app:strokeColor="#44FFFFFF" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/chipPreset5m"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="34dp"
+                    android:layout_marginEnd="6dp"
+                    android:text="5 min"
+                    android:textColor="#FFFFFF"
+                    android:textSize="11sp"
+                    app:strokeColor="#44FFFFFF" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/chipPreset15m"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="34dp"
+                    android:layout_marginEnd="6dp"
+                    android:text="15 min"
+                    android:textColor="#FFFFFF"
+                    android:textSize="11sp"
+                    app:strokeColor="#44FFFFFF" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/chipPreset30m"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="34dp"
+                    android:layout_marginEnd="6dp"
+                    android:text="30 min"
+                    android:textColor="#FFFFFF"
+                    android:textSize="11sp"
+                    app:strokeColor="#44FFFFFF" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/chipPreset1h"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="34dp"
+                    android:layout_marginEnd="6dp"
+                    android:text="1 hr"
+                    android:textColor="#FFFFFF"
+                    android:textSize="11sp"
+                    app:strokeColor="#44FFFFFF" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/chipPreset2h"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="34dp"
+                    android:layout_marginEnd="6dp"
+                    android:text="2 hr"
+                    android:textColor="#FFFFFF"
+                    android:textSize="11sp"
+                    app:strokeColor="#44FFFFFF" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/chipPreset4h"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="34dp"
+                    android:layout_marginEnd="6dp"
+                    android:text="4 hr"
+                    android:textColor="#FFFFFF"
+                    android:textSize="11sp"
+                    app:strokeColor="#44FFFFFF" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/chipPreset1d"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="34dp"
+                    android:layout_marginEnd="6dp"
+                    android:text="1 day"
+                    android:textColor="#FFFFFF"
+                    android:textSize="11sp"
+                    app:strokeColor="#44FFFFFF" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/chipPreset7d"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="34dp"
+                    android:layout_marginEnd="6dp"
+                    android:text="7 days"
+                    android:textColor="#FFFFFF"
+                    android:textSize="11sp"
+                    app:strokeColor="#44FFFFFF" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/chipPreset30d"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="34dp"
+                    android:text="30 days"
+                    android:textColor="#FFFFFF"
+                    android:textSize="11sp"
+                    app:strokeColor="#44FFFFFF" />
+
+            </LinearLayout>
+        </HorizontalScrollView>
 
         <!-- Factory reset toggle -->
         <com.google.android.material.switchmaterial.SwitchMaterial
@@ -293,8 +576,8 @@
             android:layout_height="wrap_content"
             android:text="Block factory reset during lock"
             android:textColor="#FFFFFF"
-            android:textSize="13sp"
-            android:layout_marginBottom="4dp"
+            android:textSize="12sp"
+            android:layout_marginBottom="2dp"
             android:checked="true" />
 
         <!-- USB debugging toggle -->
@@ -304,30 +587,19 @@
             android:layout_height="wrap_content"
             android:text="Disable USB debugging during lock"
             android:textColor="#FFFFFF"
-            android:textSize="13sp"
-            android:layout_marginBottom="12dp"
+            android:textSize="12sp"
+            android:layout_marginBottom="10dp"
             android:checked="true" />
 
         <!-- Activate button -->
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnActivateLock"
             android:layout_width="match_parent"
-            android:layout_height="52dp"
+            android:layout_height="50dp"
             android:text="ACTIVATE FOCUS LOCK"
             android:textSize="14sp"
+            android:textStyle="bold"
             android:backgroundTint="#E53935" />
-
-        <!-- Emergency Restore button -->
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnEmergencyRestore"
-            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-            android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:layout_marginTop="8dp"
-            android:text="EMERGENCY RESTORE APPS"
-            android:textColor="#4CAF50"
-            android:textSize="13sp"
-            app:strokeColor="#4CAF50" />
 
     </LinearLayout>
 

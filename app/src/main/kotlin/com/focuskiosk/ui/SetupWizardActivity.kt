@@ -5,7 +5,6 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
-import android.widget.NumberPicker
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -22,18 +21,19 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * SetupWizardActivity
  * -------------------
- * First-run onboarding. Three steps:
+ * First-run onboarding.
  *
  * 1. Display all installed launchable apps. User checks the ones to KEEP.
- * 2. User picks lock duration via NumberPicker wheels (Years/Days/Hours/Minutes).
- * 3. On confirmation, all settings are persisted and DPM policies are applied.
- *
- * Layout uses ConstraintLayout with RecyclerView height=0dp, constrained
- * between header and bottom controls panel — no nested ScrollView conflicts.
+ * 2. User picks lock duration via modern digital timer card with presets & steppers.
+ * 3. On confirmation, all settings are persisted, DPM policies are applied,
+ *    and the app self-hides from launcher until timer completion.
  */
 class SetupWizardActivity : AppCompatActivity() {
 
@@ -43,29 +43,16 @@ class SetupWizardActivity : AppCompatActivity() {
     private val requestNotificationPermissionLauncher = registerForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
     ) { isGranted ->
-        Log.i("SetupWizard", "POST_NOTIFICATIONS granted: $isGranted")
+        if (isGranted) {
+            Log.i("SetupWizard", "POST_NOTIFICATIONS granted")
+        } else {
+            Log.w("SetupWizard", "POST_NOTIFICATIONS denied by user")
+        }
     }
 
     private fun ensureNotificationPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            // First auto-grant silently via DevicePolicyManager as Device Owner
-            runCatching {
-                val dpm = getSystemService(android.app.admin.DevicePolicyManager::class.java)
-                dpm?.setPermissionGrantState(
-                    com.focuskiosk.admin.FocusDeviceAdminReceiver.getComponentName(this),
-                    packageName,
-                    android.Manifest.permission.POST_NOTIFICATIONS,
-                    android.app.admin.DevicePolicyManager.PERMISSION_GRANT_STATE_GRANTED
-                )
-                Log.i("SetupWizard", "Auto-granted POST_NOTIFICATIONS via DPM")
-            }.onFailure { Log.w("SetupWizard", "DPM auto-grant POST_NOTIFICATIONS: ${it.message}") }
-
-            // If still not granted, request via runtime prompt
-            if (androidx.core.content.ContextCompat.checkSelfPermission(
-                    this,
-                    android.Manifest.permission.POST_NOTIFICATIONS
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
+            if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
                 requestNotificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
             }
         }
@@ -73,17 +60,22 @@ class SetupWizardActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // If not device owner, show setup instructions and close.
+        if (!PolicyEnforcer.isDeviceOwner(this)) {
+            showOwnerError()
+            return
+        }
+
         binding = ActivitySetupWizardBinding.inflate(layoutInflater)
         setContentView(binding.root)
-
-        if (!PolicyEnforcer.isDeviceOwner(this)) { showOwnerError(); return }
 
         ensureNotificationPermission()
 
         binding.tvVersionInfo.text = "v${com.focuskiosk.BuildConfig.VERSION_NAME} (Build ${com.focuskiosk.BuildConfig.VERSION_CODE})"
 
         setupList()
-        setupDurationPickers()
+        setupDurationControls()
         binding.btnActivateLock.setOnClickListener { confirmActivation() }
 
         binding.btnCheckUpdate.setOnClickListener { triggerUpdateFlow() }
@@ -94,16 +86,6 @@ class SetupWizardActivity : AppCompatActivity() {
             triggerUpdateFlow()
         }
 
-        binding.btnEmergencyRestore.setOnClickListener {
-            try {
-                com.focuskiosk.policy.KioskRestoreManager.restoreAllApps(this)
-                android.widget.Toast.makeText(this, "All apps restored successfully", android.widget.Toast.LENGTH_LONG).show()
-                loadApps()
-            } catch (e: Exception) {
-                Log.e("SetupWizard", "Error during emergency restoration", e)
-                android.widget.Toast.makeText(this, "Restoration error: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
-            }
-        }
         loadApps()
 
         // Background silent check for updates on setup launch
@@ -222,79 +204,123 @@ class SetupWizardActivity : AppCompatActivity() {
         }
     }
 
-    // --  Duration NumberPickers  ---------------------------------------------
+    // --  Duration Controls (Steppers & Presets)  -----------------------------
 
-    /**
-     * Configures the four NumberPicker widgets.
-     *
-     * Ranges:
-     *   Years   0-5    (0 means none selected)
-     *   Days    0-364
-     *   Hours   0-23
-     *   Minutes 0-59
-     *
-     * On any value change, the duration-preview label is updated to show
-     * the aggregate human-readable total.
-     */
-    private fun setupDurationPickers() {
-        with(binding.pickerYears) {
-            minValue = 0; maxValue = 5; value = 0
-            wrapSelectorWheel = false
+    private var selectedDays: Int = 0
+    private var selectedHours: Int = 0
+    private var selectedMinutes: Int = 1 // Default 1 min for instant usability
+
+    private fun setupDurationControls() {
+        // Stepper buttons for Days
+        binding.btnPlusDay.setOnClickListener {
+            if (selectedDays < 365) selectedDays++
+            updateDurationDisplay()
         }
-        with(binding.pickerDays) {
-            minValue = 0; maxValue = 364; value = 0
-            wrapSelectorWheel = false
-        }
-        with(binding.pickerHours) {
-            minValue = 0; maxValue = 23; value = 0
-            wrapSelectorWheel = true
-        }
-        with(binding.pickerMinutes) {
-            minValue = 0; maxValue = 59; value = 0
-            wrapSelectorWheel = true
+        binding.btnMinusDay.setOnClickListener {
+            if (selectedDays > 0) selectedDays--
+            updateDurationDisplay()
         }
 
-        val listener = NumberPicker.OnValueChangeListener { _, _, _ -> updatePreview() }
-        binding.pickerYears.setOnValueChangedListener(listener)
-        binding.pickerDays.setOnValueChangedListener(listener)
-        binding.pickerHours.setOnValueChangedListener(listener)
-        binding.pickerMinutes.setOnValueChangedListener(listener)
+        // Stepper buttons for Hours
+        binding.btnPlusHour.setOnClickListener {
+            if (selectedHours < 23) {
+                selectedHours++
+            } else {
+                selectedHours = 0
+                if (selectedDays < 365) selectedDays++
+            }
+            updateDurationDisplay()
+        }
+        binding.btnMinusHour.setOnClickListener {
+            if (selectedHours > 0) {
+                selectedHours--
+            } else if (selectedDays > 0) {
+                selectedDays--
+                selectedHours = 23
+            }
+            updateDurationDisplay()
+        }
 
-        updatePreview()
+        // Stepper buttons for Minutes
+        binding.btnPlusMinute.setOnClickListener {
+            if (selectedMinutes < 59) {
+                selectedMinutes++
+            } else {
+                selectedMinutes = 0
+                if (selectedHours < 23) {
+                    selectedHours++
+                } else {
+                    selectedHours = 0
+                    if (selectedDays < 365) selectedDays++
+                }
+            }
+            updateDurationDisplay()
+        }
+        binding.btnMinusMinute.setOnClickListener {
+            if (selectedMinutes > 0) {
+                selectedMinutes--
+            } else if (selectedHours > 0) {
+                selectedHours--
+                selectedMinutes = 59
+            } else if (selectedDays > 0) {
+                selectedDays--
+                selectedHours = 23
+                selectedMinutes = 59
+            }
+            updateDurationDisplay()
+        }
+
+        // Quick Presets
+        binding.chipPreset1m.setOnClickListener { setPreset(0, 0, 1) }
+        binding.chipPreset2m.setOnClickListener { setPreset(0, 0, 2) }
+        binding.chipPreset5m.setOnClickListener { setPreset(0, 0, 5) }
+        binding.chipPreset15m.setOnClickListener { setPreset(0, 0, 15) }
+        binding.chipPreset30m.setOnClickListener { setPreset(0, 0, 30) }
+        binding.chipPreset1h.setOnClickListener { setPreset(0, 1, 0) }
+        binding.chipPreset2h.setOnClickListener { setPreset(0, 2, 0) }
+        binding.chipPreset4h.setOnClickListener { setPreset(0, 4, 0) }
+        binding.chipPreset1d.setOnClickListener { setPreset(1, 0, 0) }
+        binding.chipPreset7d.setOnClickListener { setPreset(7, 0, 0) }
+        binding.chipPreset30d.setOnClickListener { setPreset(30, 0, 0) }
+
+        updateDurationDisplay()
     }
 
-    /**
-     * Calculates total duration in milliseconds from the four pickers.
-     *
-     * unlockTimestamp = currentTimeMillis + selectedDurationMillis
-     *
-     * Uses calendar-accurate calculation:
-     *   years  × 365.25 days  (accounts for leap years on average)
-     *   days   × 86400 s
-     *   hours  × 3600 s
-     *   minutes× 60 s
-     */
-    private fun selectedDurationMs(): Long {
-        val y = binding.pickerYears.value.toLong()
-        val d = binding.pickerDays.value.toLong()
-        val h = binding.pickerHours.value.toLong()
-        val m = binding.pickerMinutes.value.toLong()
-        return (y * 365L * 24 * 60 * 60 * 1000) +
-               (d * 24L * 60 * 60 * 1000) +
-               (h * 60L * 60 * 1000) +
-               (m * 60L * 1000)
+    private fun setPreset(days: Int, hours: Int, minutes: Int) {
+        selectedDays = days
+        selectedHours = hours
+        selectedMinutes = minutes
+        updateDurationDisplay()
     }
 
-    private fun updatePreview() {
-        val ms = selectedDurationMs()
-        binding.tvDurationPreview.text = if (ms <= 0L) {
-            "No duration selected"
+    private fun updateDurationDisplay() {
+        binding.tvDisplayDays.text = String.format(Locale.US, "%02d", selectedDays)
+        binding.tvDisplayHours.text = String.format(Locale.US, "%02d", selectedHours)
+        binding.tvDisplayMinutes.text = String.format(Locale.US, "%02d", selectedMinutes)
+
+        val totalMs = selectedDurationMs()
+        if (totalMs <= 0L) {
+            binding.tvDurationPreview.text = "0m"
+            binding.tvUnlockTimestampPreview.text = "Please select a duration"
+            binding.btnActivateLock.isEnabled = false
         } else {
-            val days  = ms / (86400_000L)
-            val hours = (ms % 86400_000L) / 3600_000L
-            val mins  = (ms % 3600_000L) / 60_000L
-            "Total: ${days}d ${hours}h ${mins}m"
+            binding.btnActivateLock.isEnabled = true
+            val durationParts = mutableListOf<String>()
+            if (selectedDays > 0) durationParts.add("${selectedDays}d")
+            if (selectedHours > 0) durationParts.add("${selectedHours}h")
+            if (selectedMinutes > 0) durationParts.add("${selectedMinutes}m")
+            val durationString = durationParts.joinToString(" ")
+            binding.tvDurationPreview.text = durationString
+
+            val unlockTime = System.currentTimeMillis() + totalMs
+            val timeFormat = SimpleDateFormat("EEE, MMM d  h:mm a", Locale.getDefault())
+            binding.tvUnlockTimestampPreview.text = "Unlocks at: ${timeFormat.format(Date(unlockTime))}"
         }
+    }
+
+    private fun selectedDurationMs(): Long {
+        val totalMinutes = (selectedDays * 24L * 60L) + (selectedHours * 60L) + selectedMinutes
+        return totalMinutes * 60_000L
     }
 
     // --  Confirm & apply  ----------------------------------------------------
@@ -378,16 +404,16 @@ class SetupWizardActivity : AppCompatActivity() {
             withContext(Dispatchers.Main) {
                 SecureStorage.setSetupCompleted(this@SetupWizardActivity, true)
 
-                // Keep SetupWizardActivity enabled so user can always view status and emergency restore
+                // Self-hide FocusKiosk itself from launcher and app drawer during lock
                 try {
                     packageManager.setComponentEnabledSetting(
                         android.content.ComponentName(this@SetupWizardActivity, SetupWizardActivity::class.java),
-                        PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                        PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
                         PackageManager.DONT_KILL_APP
                     )
-                    Log.i("SetupWizard", "SetupWizardActivity kept enabled for user access.")
+                    Log.i("SetupWizard", "SetupWizardActivity disabled to self-hide during lock.")
                 } catch (e: Exception) {
-                    Log.e("SetupWizard", "Failed to configure component state", e)
+                    Log.e("SetupWizard", "Failed to disable component state", e)
                 }
 
                 // Return user to the native stock home launcher

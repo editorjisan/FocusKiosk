@@ -206,6 +206,18 @@ object PolicyEnforcer {
         "com.android.wifi",
         "com.android.server.telecom",
         "com.android.packageinstaller",
+        // Telephony, Phone & Dialers (must NEVER be hidden or suspended)
+        "com.google.android.dialer",
+        "com.android.dialer",
+        "com.sh.smart.caller",
+        "com.transsion.smartcaller",
+        "com.transsion.phonemaster",
+        "com.android.incallui",
+        "com.google.android.contacts",
+        "com.android.contacts",
+        "com.google.android.apps.messaging",
+        "com.android.mms",
+        "com.android.mms.service",
         // Google core
         "com.google.android.gms",
         "com.google.android.gsf",

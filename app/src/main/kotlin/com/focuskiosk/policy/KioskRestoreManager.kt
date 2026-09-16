@@ -132,17 +132,7 @@ object KioskRestoreManager {
             }
         }
 
-        // 4b. Refresh system launcher safely by launching Home Intent (NO protected broadcasts!)
-        try {
-            val homeIntent = Intent(Intent.ACTION_MAIN).apply {
-                addCategory(Intent.CATEGORY_HOME)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            appContext.startActivity(homeIntent)
-            Log.i(TAG, "Launched home intent to safely refresh stock launcher.")
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to launch home intent: ${e.message}")
-        }
+
 
         // 5. Restore user restrictions (unblock all installs, ADB, factory reset, unknown sources)
         runCatching {
