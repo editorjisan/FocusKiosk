@@ -1,8 +1,8 @@
 {
-  "versionCode": 20,
-  "versionName": "1.2.6",
-  "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.2.6/FocusKiosk.apk",
-  "sha256": "0a0874e2afa06487c5395c4d011b04bb7fd17da738a4cfba104f319fc52641b0",
-  "releaseNotes": "Instant speed & zero-lag focus transitions (bulk suspension and chunked parallel hiding/unhiding), 0ms app drawer cache, expanded 27-point adult & suggestive media purger with porcelain/Asian skin color models & full-storage file explorer crawler, AppOp 92 unrestricted deletion, and universal browser Facebook Reels escape blocker.",
+  "versionCode": 21,
+  "versionName": "1.2.7",
+  "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.2.7/FocusKiosk.apk",
+  "sha256": "0b1b784b86030f518cc192a3e4b256d5056faff8a3a34bee5d5ec8b5ec3947ed",
+  "releaseNotes": "Enhanced adult media detection for bare legs, swimsuits, monokinis, and micro-bikinis with multi-zone lower-body analysis; zero-CPU memory caching for sub-30ms storage sweeps without phone lag; instant zero-touch OTA update with verified SHA-256 integrity.",
   "minSdkVersion": 28
 }
