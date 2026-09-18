@@ -51,57 +51,9 @@ class MediaPurgeWorker(ctx: Context, params: WorkerParameters)
     }
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
-        Log.i(TAG, "Executing periodic adult media sweep...")
-        var purgedCount = 0
-
-        // 1. Scan filesystem directories directly
-        val scanDirs = listOf(
-            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),
-            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES),
-            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM),
-            File(Environment.getExternalStorageDirectory(), "Download")
-        ).distinct()
-
-        for (dir in scanDirs) {
-            if (dir.exists() && dir.isDirectory) {
-                dir.walkTopDown().maxDepth(3).forEach { file ->
-                    if (file.isFile && AdultMediaDetector.isMediaFile(file)) {
-                        if (AdultMediaDetector.isExplicit(file)) {
-                            Log.w(TAG, "Sweeper found explicit file: ${file.name}")
-                            if (AdultMediaDetector.purgeFile(applicationContext, file)) {
-                                purgedCount++
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // 2. Scan MediaStore records
-        val projection = arrayOf(MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DATA)
-        listOf(
-            MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-            MediaStore.Video.Media.EXTERNAL_CONTENT_URI
-        ).forEach { uri ->
-            runCatching {
-                applicationContext.contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
-                    val dataIdx = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATA)
-                    while (cursor.moveToNext()) {
-                        val path = cursor.getString(dataIdx) ?: continue
-                        val file = File(path)
-                        if (file.exists() && AdultMediaDetector.isExplicit(file)) {
-                            Log.w(TAG, "MediaStore sweep found explicit file: $path")
-                            if (AdultMediaDetector.purgeFile(applicationContext, file)) {
-                                purgedCount++
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        Log.i(TAG, "Periodic adult media sweep completed. Purged $purgedCount file(s).")
+        Log.i(TAG, "Executing periodic adult media sweep via WorkManager...")
+        val (scanned, purged) = com.focuskiosk.media.RealtimeMediaObserverService.performFullSweep(applicationContext)
+        Log.i(TAG, "Periodic adult media sweep completed: $scanned scanned, $purged purged.")
         Result.success()
     }
 }
