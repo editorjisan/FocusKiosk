@@ -1,8 +1,8 @@
 {
-  "versionCode": 16,
-  "versionName": "1.2.2",
-  "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.2.2/FocusKiosk.apk",
+  "versionCode": 17,
+  "versionName": "1.2.3",
+  "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.2.3/FocusKiosk.apk",
   "sha256": "",
-  "releaseNotes": "Resilient download engine with retry, auto-recovery on network stalls, package integrity verification, and adult media purge overhaul.",
+  "releaseNotes": "100% autonomous background adult & trash media purifier (30-min + screen-off triggers), deep scan for Infinix AI Gallery & Google Photos recycle bins, zero-lag CPU throttling, removed manual UI purge controls.",
   "minSdkVersion": 28
 }

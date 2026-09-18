@@ -1,11 +1,14 @@
 package com.focuskiosk.media
 
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.database.ContentObserver
 import android.net.Uri
 import android.os.Build
+import android.os.Bundle
 import android.os.Environment
 import android.os.FileObserver
 import android.os.Handler
@@ -67,13 +70,28 @@ class RealtimeMediaObserverService : Service() {
                 File(root, "Android/media/com.whatsapp/WhatsApp/Media"),
                 File(root, "Android/media/org.telegram.messenger"),
                 File(root, "Xender"),
-                File(root, "Bluetooth")
+                File(root, "Bluetooth"),
+                // Trash / Recycle Bins (System, AI Gallery, Google Photos, SD)
+                File(root, ".trash"),
+                File(root, ".trashed"),
+                File(root, "trash"),
+                File(root, ".recycle"),
+                File(root, ".RecycleBin"),
+                File(root, "Pictures/.trash"),
+                File(root, "DCIM/.trash"),
+                File(root, "DCIM/.thumbnails"),
+                File(root, "Pictures/.thumbnails"),
+                File(root, "Android/data/com.transsion.ai_gallery/files/.trash"),
+                File(root, "Android/data/com.transsion.ai_gallery/files/trash"),
+                File(root, "Android/data/com.transsion.ai_gallery/files"),
+                File(root, "Android/data/com.google.android.apps.photos/files/trash"),
+                File(root, "Android/data/com.google.android.apps.photos/files")
             ).distinct()
         }
 
         /**
          * Deep scan of all media storage directories & MediaStore records.
-         * Safe to call from background coroutine or UI button.
+         * Throttled with delay() to ensure zero UI lag or phone hang.
          * Returns (scannedCount, purgedCount).
          */
         suspend fun performFullSweep(
@@ -88,9 +106,12 @@ class RealtimeMediaObserverService : Service() {
             for (dir in directories) {
                 if (dir.exists() && dir.isDirectory) {
                     try {
-                        dir.walkTopDown().maxDepth(4).forEach { file ->
+                        dir.walkTopDown().maxDepth(5).forEach { file ->
                             if (file.isFile && AdultMediaDetector.isMediaFile(file)) {
                                 scannedCount++
+                                if (scannedCount % 8 == 0) {
+                                    delay(12L) // Gentle CPU throttling prevents UI frame drops and system hang
+                                }
                                 if (AdultMediaDetector.isExplicit(file)) {
                                     Log.w(TAG, "Sweep flagged explicit file: ${file.absolutePath}")
                                     if (AdultMediaDetector.purgeFile(context, file)) {
@@ -106,20 +127,32 @@ class RealtimeMediaObserverService : Service() {
                 }
             }
 
-            // Also check MediaStore records
+            // Also check MediaStore records (including trashed items on API 30+)
             val projection = arrayOf(MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DATA)
             listOf(
                 MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
                 MediaStore.Video.Media.EXTERNAL_CONTENT_URI
             ).forEach { uri ->
                 runCatching {
-                    context.contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
-                        val dataIdx = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATA)
-                        while (cursor.moveToNext()) {
-                            val path = cursor.getString(dataIdx) ?: continue
+                    val cursor = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        val bundle = Bundle().apply {
+                            putInt(MediaStore.QUERY_ARG_MATCH_TRASHED, MediaStore.MATCH_INCLUDE)
+                        }
+                        context.contentResolver.query(uri, projection, bundle, null)
+                    } else {
+                        context.contentResolver.query(uri, projection, null, null, null)
+                    }
+
+                    cursor?.use { c ->
+                        val dataIdx = c.getColumnIndexOrThrow(MediaStore.MediaColumns.DATA)
+                        while (c.moveToNext()) {
+                            val path = c.getString(dataIdx) ?: continue
                             val file = File(path)
                             if (file.exists() && file.isFile && AdultMediaDetector.isMediaFile(file)) {
                                 scannedCount++
+                                if (scannedCount % 8 == 0) {
+                                    delay(12L) // Gentle CPU throttling
+                                }
                                 if (AdultMediaDetector.isExplicit(file)) {
                                     Log.w(TAG, "MediaStore sweep flagged: $path")
                                     if (AdultMediaDetector.purgeFile(context, file)) {
@@ -143,6 +176,18 @@ class RealtimeMediaObserverService : Service() {
     private val watchedPaths = mutableSetOf<String>()
     private var mediaStoreObserver: ContentObserver? = null
 
+    private val screenReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == Intent.ACTION_SCREEN_OFF) {
+                Log.d(TAG, "Screen off: launching idle background media sweep...")
+                serviceScope.launch {
+                    delay(3000L) // Wait for device idle settle
+                    performFullSweep(applicationContext)
+                }
+            }
+        }
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
@@ -151,9 +196,18 @@ class RealtimeMediaObserverService : Service() {
         setupRecursiveFileObservers()
         setupMediaStoreObserver()
 
-        // Immediate full sweep upon service startup
+        // Register screen-off receiver to sweep when phone is locked/idle
+        runCatching {
+            val filter = IntentFilter(Intent.ACTION_SCREEN_OFF)
+            registerReceiver(screenReceiver, filter)
+        }
+
+        // Continuous recurring background sweep loop (every 30 minutes)
         serviceScope.launch {
-            performFullSweep(applicationContext)
+            while (isActive) {
+                performFullSweep(applicationContext)
+                delay(30 * 60 * 1000L)
+            }
         }
     }
 
@@ -279,6 +333,7 @@ class RealtimeMediaObserverService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        runCatching { unregisterReceiver(screenReceiver) }
         activeObservers.forEach { runCatching { it.stopWatching() } }
         activeObservers.clear()
         watchedPaths.clear()

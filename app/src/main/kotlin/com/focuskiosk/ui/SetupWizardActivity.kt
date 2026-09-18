@@ -90,15 +90,12 @@ class SetupWizardActivity : AppCompatActivity() {
         // Background silent check for updates on setup launch
         com.focuskiosk.updater.SilentUpdateManager.triggerImmediateCheck(this)
 
-        setupMediaPurgeControls()
-
         // Ensure sideloading and APK installs are never restricted
         PolicyEnforcer.unblockAppInstalls(this)
     }
 
     override fun onResume() {
         super.onResume()
-        setupMediaPurgeControls()
         // Ensure sideloading and APK installs are never restricted
         PolicyEnforcer.unblockAppInstalls(this)
 
@@ -423,49 +420,7 @@ class SetupWizardActivity : AppCompatActivity() {
         }
     }
 
-    // --  Adult Media Purge Controls  -------------------------------------
 
-    private fun setupMediaPurgeControls() {
-        // Check Android 11+ All Files Access
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            val hasAllFiles = android.os.Environment.isExternalStorageManager()
-            if (!hasAllFiles) {
-                binding.btnGrantAllFiles.visibility = android.view.View.VISIBLE
-                binding.btnGrantAllFiles.setOnClickListener {
-                    runCatching {
-                        val intent = Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
-                            data = android.net.Uri.parse("package:$packageName")
-                        }
-                        startActivity(intent)
-                    }.onFailure {
-                        val intent = Intent(android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
-                        startActivity(intent)
-                    }
-                }
-            } else {
-                binding.btnGrantAllFiles.visibility = android.view.View.GONE
-            }
-        } else {
-            binding.btnGrantAllFiles.visibility = android.view.View.GONE
-        }
-
-        binding.btnPurgeMediaNow.setOnClickListener {
-            binding.btnPurgeMediaNow.isEnabled = false
-            binding.tvMediaPurgeStatus.text = "Deep scanning internal storage..."
-            lifecycleScope.launch {
-                val (scanned, purged) = com.focuskiosk.media.RealtimeMediaObserverService.performFullSweep(this@SetupWizardActivity) { s, p ->
-                    binding.tvMediaPurgeStatus.text = "Scanning storage ($s files checked, $p explicit purged)..."
-                }
-                binding.btnPurgeMediaNow.isEnabled = true
-                binding.tvMediaPurgeStatus.text = "Completed: $scanned media scanned, $purged adult files purged!"
-                Toast.makeText(
-                    this@SetupWizardActivity,
-                    "Media Purge Complete: $purged adult file(s) permanently removed!",
-                    Toast.LENGTH_LONG
-                ).show()
-            }
-        }
-    }
 
     // --  Error  ---------------------------------------------------------------
 

@@ -7,6 +7,7 @@ import android.graphics.Color
 import android.media.MediaMetadataRetriever
 import android.media.MediaScannerConnection
 import android.net.Uri
+import android.os.Build
 import android.provider.MediaStore
 import android.util.Log
 import java.io.File
@@ -28,21 +29,28 @@ object AdultMediaDetector {
 
     private const val TAG = "AdultMediaDetector"
     private const val THUMB_SIZE = 64
-    private const val SKIN_THRESHOLD = 0.30f // 30% skin-tone coverage flags as explicit
+    private const val SKIN_THRESHOLD = 0.22f // 22% skin-tone coverage flags as explicit/revealing (bikini, swimwear, memes)
+    private const val TRASH_SKIN_THRESHOLD = 0.16f // 16% threshold for items found in trash/recycle bins
 
     private val ADULT_KEYWORDS = setOf(
-        // English standard
+        // English standard & explicit
         "porn", "xxx", "sex", "nude", "nudity", "erotic", "adult", "nsfw", "hentai",
         "boob", "boobs", "vagina", "dick", "pussy", "strip", "stripper", "onlyfans",
         "sensual", "camgirl", "playboy", "hardcore", "softcore", "slut", "whore",
         "penetration", "masturbat", "ejaculat", "blowjob", "handjob", "creampie",
         "milf", "bdsm", "fetish", "anal", "dildo", "tits", "titties", "ass", "cunt",
         "cock", "orgasm", "gangbang", "threesome", "incest", "taboo", "panties", "lingerie",
+        // Revealing / Swimwear / Bikini / Revealing Memes
+        "bikini", "swimsuit", "swimwear", "bra", "panty", "underwear", "thong",
+        "cleavage", "navel", "belly", "waist", "thigh", "thighs", "mini_skirt", "miniskirt",
+        "crop_top", "croptop", "exposed", "hot_model", "sexy", "romance", "kiss", "kissing",
+        "bed_scene", "intimate", "deep_neck", "saree_hot", "blouse_hot", "hot_meme", "meme_hot",
         // Desi / Bengali / Hindi transliterations
         "bhabhi", "boudi", "choti", "magi", "khanki", "choda", "chodi", "chudi", "chudai",
         "gopon", "sexvideo", "desi", "mal", "viral", "scandal", "leak", "leaked", "mms",
         "hot_video", "hotvideo", "callgirl", "escort", "savita", "sunny", "mia", "khalifa",
-        "actress", "aunty", "room_video", "hotel_video", "kamasutra",
+        "actress", "aunty", "room_video", "hotel_video", "kamasutra", "boudi_hot", "bhabhi_hot",
+        "desi_hot", "tiktok_hot", "reels_hot", "actress_hot", "viral_hot",
         // Major adult sites & studios
         "xhamster", "xvideos", "xnxx", "brazzers", "pornhub", "redtube", "youporn",
         "spankbang", "eporner", "beeg", "tubegalore", "chaturbate", "stripchat", "bangbros",
@@ -63,12 +71,17 @@ object AdultMediaDetector {
     fun isExplicit(file: File): Boolean {
         if (!file.exists() || !file.isFile || file.length() <= 0) return false
 
-        // ── Tier 1: Fast Name / Path Keyword Check ────────────────────────────
         val nameLower = file.name.lowercase(Locale.ROOT)
         val pathLower = file.absolutePath.lowercase(Locale.ROOT)
+        val isTrash = pathLower.contains("/.trash") || pathLower.contains("/.trashed") ||
+                      pathLower.contains("/trash") || pathLower.contains("/.recycle") ||
+                      pathLower.contains("/recycle") || nameLower.startsWith(".trash") ||
+                      nameLower.startsWith(".trashed")
 
+        // ── Tier 1: Fast Name / Path Keyword Check ────────────────────────────
         for (keyword in ADULT_KEYWORDS) {
-            if (nameLower.contains(keyword) || pathLower.contains("/$keyword") || pathLower.contains("_$keyword") || pathLower.contains("-$keyword")) {
+            if (nameLower.contains(keyword) || pathLower.contains("/$keyword") ||
+                pathLower.contains("_$keyword") || pathLower.contains("-$keyword")) {
                 Log.w(TAG, "Tier 1 Triggered: File '${file.name}' matches adult keyword '$keyword'")
                 return true
             }
@@ -78,8 +91,8 @@ object AdultMediaDetector {
         val ext = file.extension.lowercase(Locale.ROOT)
         return try {
             when {
-                ext in IMAGE_EXTENSIONS -> analyzeImage(file)
-                ext in VIDEO_EXTENSIONS -> analyzeVideo(file)
+                ext in IMAGE_EXTENSIONS -> analyzeImage(file, isTrash)
+                ext in VIDEO_EXTENSIONS -> analyzeVideo(file, isTrash)
                 else -> false
             }
         } catch (e: Exception) {
@@ -88,7 +101,7 @@ object AdultMediaDetector {
         }
     }
 
-    private fun analyzeImage(file: File): Boolean {
+    private fun analyzeImage(file: File, isTrash: Boolean): Boolean {
         val boundsOptions = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(file.absolutePath, boundsOptions)
         val width = boundsOptions.outWidth
@@ -111,14 +124,15 @@ object AdultMediaDetector {
         val ratio = calculateSkinRatio(thumb)
         thumb.recycle()
 
-        val isSkinHeavy = ratio >= SKIN_THRESHOLD
+        val threshold = if (isTrash) TRASH_SKIN_THRESHOLD else SKIN_THRESHOLD
+        val isSkinHeavy = ratio >= threshold
         if (isSkinHeavy) {
-            Log.w(TAG, "Tier 2 Image Trigger: Skin ratio $ratio >= $SKIN_THRESHOLD for '${file.name}'")
+            Log.w(TAG, "Tier 2 Image Trigger: Skin ratio $ratio >= $threshold for '${file.name}' (isTrash=$isTrash)")
         }
         return isSkinHeavy
     }
 
-    private fun analyzeVideo(file: File): Boolean {
+    private fun analyzeVideo(file: File, isTrash: Boolean): Boolean {
         val retriever = MediaMetadataRetriever()
         return try {
             retriever.setDataSource(file.absolutePath)
@@ -139,6 +153,9 @@ object AdultMediaDetector {
                 listOf(500_000L, 1_500_000L)
             }
 
+            val singleThreshold = if (isTrash) 0.22f else 0.28f
+            val multiThreshold = if (isTrash) 0.14f else 0.18f
+
             var skinTriggerCount = 0
             for (timeUs in checkpoints) {
                 val rawFrame = retriever.getFrameAtTime(timeUs, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
@@ -149,18 +166,17 @@ object AdultMediaDetector {
                 val ratio = calculateSkinRatio(thumb)
                 thumb.recycle()
 
-                if (ratio >= SKIN_THRESHOLD) {
+                if (ratio >= multiThreshold) {
                     skinTriggerCount++
-                    // If any single frame has high skin (>= 38%) or two frames have >= 30%, flag immediately!
-                    if (ratio >= 0.38f || skinTriggerCount >= 2) {
-                        Log.w(TAG, "Tier 2 Video Trigger: Skin ratio $ratio at ${timeUs / 1000}ms for '${file.name}'")
+                    if (ratio >= singleThreshold || skinTriggerCount >= 2) {
+                        Log.w(TAG, "Tier 2 Video Trigger: Skin ratio $ratio at ${timeUs / 1000}ms for '${file.name}' (isTrash=$isTrash)")
                         return true
                     }
                 }
             }
-            val triggered = skinTriggerCount > 0
+            val triggered = skinTriggerCount > 0 && isTrash
             if (triggered) {
-                Log.w(TAG, "Tier 2 Video Triggered: Skin checkpoints positive for '${file.name}'")
+                Log.w(TAG, "Tier 2 Trash Video Triggered: Skin checkpoints positive for '${file.name}'")
             }
             triggered
         } catch (e: Exception) {
@@ -219,7 +235,7 @@ object AdultMediaDetector {
             }
         }.onFailure { Log.w(TAG, "Direct file deletion failed: ${it.message}") }
 
-        // 3. MediaStore deletion via ContentResolver
+        // 3. MediaStore deletion via ContentResolver (including Trashed media)
         runCatching {
             val cr = context.contentResolver
             if (contentUri != null) {
@@ -230,10 +246,31 @@ object AdultMediaDetector {
             cr.delete(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, where, args)
             cr.delete(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, where, args)
             cr.delete(MediaStore.Downloads.EXTERNAL_CONTENT_URI, where, args)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                cr.delete(MediaStore.Files.getContentUri("external"), where, args)
+            }
             purged = true
         }.onFailure { Log.w(TAG, "MediaStore resolver deletion failed: ${it.message}") }
 
-        // 4. Trigger media scan so gallery and file manager indices update immediately
+        // 4. Delete associated thumbnails from .thumbnails folders
+        runCatching {
+            val baseName = file.nameWithoutExtension
+            val parent = file.parentFile
+            val thumbDirs = listOfNotNull(
+                parent?.let { File(it, ".thumbnails") },
+                File(android.os.Environment.getExternalStorageDirectory(), "DCIM/.thumbnails"),
+                File(android.os.Environment.getExternalStorageDirectory(), "Pictures/.thumbnails")
+            )
+            for (tDir in thumbDirs) {
+                if (tDir.exists() && tDir.isDirectory) {
+                    tDir.listFiles { _, name -> name.contains(baseName) }?.forEach { thumbFile ->
+                        thumbFile.delete()
+                    }
+                }
+            }
+        }
+
+        // 5. Trigger media scan so gallery and file manager indices update immediately
         runCatching {
             MediaScannerConnection.scanFile(context, arrayOf(file.absolutePath), null, null)
         }
