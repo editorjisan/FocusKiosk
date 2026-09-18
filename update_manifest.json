@@ -1,8 +1,8 @@
 {
-  "versionCode": 15,
-  "versionName": "1.2.1",
-  "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.2.1/FocusKiosk.apk",
-  "sha256": "b3c339e3cbe9c0c6469867450bee84c94235ee7445b0cdf0dabb8f2b168f554a",
-  "releaseNotes": "Overhauled adult media purge with legacy storage access, recursive observation, multi-frame video detection, zero-byte truncate wipe, and CI/CD workflow permissions.",
+  "versionCode": 16,
+  "versionName": "1.2.2",
+  "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.2.2/FocusKiosk.apk",
+  "sha256": "150a08de345247e7787bcbd503323001c3beecba5c72a1950ba78ad33b6bc72a",
+  "releaseNotes": "Resilient download engine with retry, auto-recovery on network stalls, package integrity verification, and adult media purge overhaul.",
   "minSdkVersion": 28
 }

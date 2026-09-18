@@ -196,7 +196,7 @@ object SilentUpdateManager {
                 return@withContext false
             }
 
-            if (manifest.sha256.isNotBlank() && !ApkVerifier.verify(apkFile, manifest.sha256)) {
+            if (manifest.sha256.isNotBlank() && !ApkVerifier.verify(apkFile, manifest.sha256, appContext, manifest.versionCode)) {
                 Log.e(TAG, "SHA-256 integrity verification failed for downloaded APK.")
                 apkFile.delete()
                 cancelUpdateNotification(appContext)
@@ -272,11 +272,22 @@ object SilentUpdateManager {
             val assets = json.optJSONArray("assets")
             var apkDownloadUrl = ""
             if (assets != null) {
+                // First pass: look specifically for FocusKiosk.apk
                 for (i in 0 until assets.length()) {
                     val asset = assets.getJSONObject(i)
-                    if (asset.optString("name").endsWith(".apk")) {
+                    if (asset.optString("name").equals("FocusKiosk.apk", ignoreCase = true)) {
                         apkDownloadUrl = asset.optString("browser_download_url")
                         break
+                    }
+                }
+                // Fallback pass: any .apk asset
+                if (apkDownloadUrl.isBlank()) {
+                    for (i in 0 until assets.length()) {
+                        val asset = assets.getJSONObject(i)
+                        if (asset.optString("name").endsWith(".apk")) {
+                            apkDownloadUrl = asset.optString("browser_download_url")
+                            break
+                        }
                     }
                 }
             }
@@ -354,7 +365,7 @@ object SilentUpdateManager {
                 return@withContext false
             }
 
-            if (manifest.sha256.isNotBlank() && !ApkVerifier.verify(apkFile, manifest.sha256)) {
+            if (manifest.sha256.isNotBlank() && !ApkVerifier.verify(apkFile, manifest.sha256, appContext, manifest.versionCode)) {
                 withContext(Dispatchers.Main) { onProgress(0, "SHA-256 integrity verification failed!") }
                 apkFile.delete()
                 return@withContext false
@@ -397,46 +408,76 @@ object SilentUpdateManager {
             runCatching { acquire(10 * 60 * 1000L) }
         }
 
-        return try {
-            val targetDir = context.cacheDir
-            val targetFile = File(targetDir, "FocusKiosk_v${versionCode}.apk")
-            if (targetFile.exists()) targetFile.delete()
+        val targetDir = context.cacheDir
+        val targetFile = File(targetDir, "FocusKiosk_v${versionCode}.apk")
 
-            val request = Request.Builder().url(apkUrl).build()
-            val response = httpClient.newCall(request).execute()
-            if (!response.isSuccessful) {
-                Log.e(TAG, "APK download HTTP failure: ${response.code}")
-                return null
-            }
+        try {
+            var attempt = 0
+            while (attempt < 3) {
+                attempt++
+                if (targetFile.exists()) targetFile.delete()
 
-            val body = response.body ?: return null
-            val contentLength = body.contentLength()
-            var totalBytesRead = 0L
+                val request = Request.Builder()
+                    .url(apkUrl)
+                    .header("User-Agent", "FocusKiosk-Updater")
+                    .header("Cache-Control", "no-cache")
+                    .build()
 
-            body.byteStream().use { input ->
-                targetFile.outputStream().use { output ->
-                    val buffer = ByteArray(65536)
-                    var bytesRead: Int
-                    var lastPct = -1
-                    while (input.read(buffer).also { bytesRead = it } != -1) {
-                        output.write(buffer, 0, bytesRead)
-                        totalBytesRead += bytesRead
-                        if (contentLength > 0) {
-                            val percent = ((totalBytesRead * 100) / contentLength).toInt().coerceIn(0, 95)
-                            if (percent != lastPct) {
-                                lastPct = percent
-                                onProgress(percent)
+                try {
+                    val response = httpClient.newCall(request).execute()
+                    if (!response.isSuccessful) {
+                        Log.e(TAG, "APK download HTTP failure (attempt $attempt): ${response.code}")
+                        Thread.sleep(1500L)
+                        continue
+                    }
+
+                    val body = response.body
+                    if (body == null) {
+                        Thread.sleep(1500L)
+                        continue
+                    }
+
+                    val contentLength = body.contentLength()
+                    var totalBytesRead = 0L
+
+                    body.byteStream().use { input ->
+                        targetFile.outputStream().use { output ->
+                            val buffer = ByteArray(65536)
+                            var bytesRead: Int
+                            var lastPct = -1
+                            while (input.read(buffer).also { bytesRead = it } != -1) {
+                                output.write(buffer, 0, bytesRead)
+                                totalBytesRead += bytesRead
+                                if (contentLength > 0) {
+                                    val percent = ((totalBytesRead * 100) / contentLength).toInt().coerceIn(0, 95)
+                                    if (percent != lastPct) {
+                                        lastPct = percent
+                                        onProgress(percent)
+                                    }
+                                }
                             }
+                            output.flush()
                         }
                     }
-                    output.flush()
+
+                    if (contentLength > 0 && totalBytesRead < contentLength) {
+                        Log.w(TAG, "Download incomplete on attempt $attempt ($totalBytesRead/$contentLength). Retrying...")
+                        targetFile.delete()
+                        Thread.sleep(1500L)
+                        continue
+                    }
+
+                    if (targetFile.length() > 5_000_000L) {
+                        Log.i(TAG, "Downloaded ${targetFile.length()} bytes to ${targetFile.absolutePath}")
+                        return targetFile
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Exception on attempt $attempt downloading APK: ${e.message}")
+                    targetFile.delete()
+                    Thread.sleep(1500L)
                 }
             }
-            Log.i(TAG, "Downloaded ${targetFile.length()} bytes to ${targetFile.absolutePath}")
-            targetFile
-        } catch (e: Exception) {
-            Log.e(TAG, "Error downloading APK: ${e.message}", e)
-            null
+            return null
         } finally {
             runCatching {
                 if (wakeLock.isHeld) wakeLock.release()
