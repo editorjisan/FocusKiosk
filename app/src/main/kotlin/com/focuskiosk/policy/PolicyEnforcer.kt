@@ -1,9 +1,15 @@
 package com.focuskiosk.policy
 
 import android.app.admin.DevicePolicyManager
+import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.os.Build
+import android.os.Bundle
 import android.os.UserManager
+import android.provider.Settings
 import android.util.Log
 import com.focuskiosk.admin.FocusDeviceAdminReceiver
 import com.focuskiosk.storage.SecureStorage
@@ -363,9 +369,154 @@ object PolicyEnforcer {
         if (blockUsb) disableUsbDebugging(context)
         if (blockFactoryReset) disableFactoryReset(context)
 
-        // 6. Mark lock as active.
+        // 6. Enforce web filtering (browser URLBlocklist, Private DNS, and deep link interceptor)
+        enforceWebFiltering(context)
+
+        // 7. Silently grant media permissions for real-time adult media purge
+        grantMediaPermissionsSilently(context)
+
+        // 8. Mark lock as active.
         SecureStorage.putBoolean(context, SecureStorage.KEY_LOCK_ACTIVE, true)
         Log.i(TAG, "Focus lock fully activated. ${toBlock.size} apps targeted.")
+    }
+
+    // ── Web & Deep Link Filtering ─────────────────────────────────────────────
+
+    private val MANAGED_BROWSERS = listOf(
+        "com.android.chrome",
+        "com.chrome.beta",
+        "com.google.android.apps.chrome",
+        "com.transsion.phoenix",
+        "com.microsoft.emmx",
+        "org.mozilla.firefox",
+        "com.opera.browser",
+        "com.opera.mini.native",
+        "com.brave.browser"
+    )
+
+    private val BLOCKED_URL_PATTERNS = arrayOf(
+        "*://*.facebook.com/*",
+        "*://*.fb.com/*",
+        "*://*.fb.watch/*",
+        "*://*.fb.me/*",
+        "*://*.m.facebook.com/*",
+        "*://*.instagram.com/*",
+        "*://*.tiktok.com/*",
+        "*://*.twitter.com/*",
+        "*://*.x.com/*",
+        "*://*.pornhub.com/*",
+        "*://*.xvideos.com/*",
+        "*://*.xnxx.com/*",
+        "*://*.xhamster.com/*",
+        "*://*.redtube.com/*",
+        "*://*.youporn.com/*",
+        "*://*.stripchat.com/*",
+        "*://*.chaturbate.com/*",
+        "*://*.onlyfans.com/*",
+        "*://*.spankbang.com/*",
+        "*://*.eporner.com/*",
+        "*://*.beeg.com/*",
+        "*://*.tube8.com/*",
+        "*://*.livejasmin.com/*"
+    )
+
+    private val BLOCKED_HOSTS = listOf(
+        "facebook.com", "m.facebook.com", "www.facebook.com", "fb.com", "fb.watch", "fb.me",
+        "instagram.com", "www.instagram.com", "tiktok.com", "www.tiktok.com",
+        "pornhub.com", "www.pornhub.com", "xvideos.com", "www.xvideos.com",
+        "xnxx.com", "www.xnxx.com", "xhamster.com", "www.xhamster.com",
+        "redtube.com", "www.redtube.com", "youporn.com", "onlyfans.com"
+    )
+
+    fun enforceWebFiltering(context: Context) {
+        if (!requireDeviceOwner(context)) return
+
+        // 1. Managed Browser URLBlocklist
+        val restrictions = Bundle().apply {
+            putStringArray("URLBlocklist", BLOCKED_URL_PATTERNS)
+        }
+        MANAGED_BROWSERS.forEach { pkg ->
+            runCatching {
+                dpm(context).setApplicationRestrictions(admin(context), pkg, restrictions)
+            }
+        }
+        Log.i(TAG, "Applied URLBlocklist restrictions to ${MANAGED_BROWSERS.size} browsers.")
+
+        // 2. Private DNS (Cloudflare Family adult & malware blocking)
+        runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val res = dpm(context).setGlobalPrivateDnsModeSpecifiedHost(admin(context), "family.cloudflare-dns.com")
+                Log.i(TAG, "Set Private DNS to family.cloudflare-dns.com (result=$res)")
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                dpm(context).setGlobalSetting(admin(context), "private_dns_mode", "hostname")
+                dpm(context).setGlobalSetting(admin(context), "private_dns_specifier", "family.cloudflare-dns.com")
+            }
+            Unit
+        }.onFailure { Log.w(TAG, "Failed setting Private DNS: ${it.message}") }
+
+        // 3. Persistent Preferred Activity for deep links (BlockedUrlActivity)
+        runCatching {
+            val blockedComponent = ComponentName(context, "com.focuskiosk.ui.BlockedUrlActivity")
+            BLOCKED_HOSTS.forEach { host ->
+                val filter = IntentFilter(Intent.ACTION_VIEW).apply {
+                    addCategory(Intent.CATEGORY_DEFAULT)
+                    addCategory(Intent.CATEGORY_BROWSABLE)
+                    addDataScheme("http")
+                    addDataScheme("https")
+                    addDataAuthority(host, null)
+                }
+                dpm(context).addPersistentPreferredActivity(admin(context), filter, blockedComponent)
+            }
+            Log.i(TAG, "Configured persistent preferred activity for ${BLOCKED_HOSTS.size} deep link hosts.")
+        }.onFailure { Log.w(TAG, "Failed adding persistent preferred activity: ${it.message}") }
+    }
+
+    fun clearWebFiltering(context: Context) {
+        if (!requireDeviceOwner(context)) return
+
+        // 1. Clear browser restrictions
+        MANAGED_BROWSERS.forEach { pkg ->
+            runCatching {
+                dpm(context).setApplicationRestrictions(admin(context), pkg, Bundle.EMPTY)
+            }
+        }
+
+        // 2. Clear persistent preferred activities for our package
+        runCatching {
+            dpm(context).clearPackagePersistentPreferredActivities(admin(context), context.packageName)
+        }
+
+        // 3. Restore Private DNS to opportunistic / default
+        runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                dpm(context).setGlobalPrivateDnsModeOpportunistic(admin(context))
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                dpm(context).setGlobalSetting(admin(context), "private_dns_mode", "opportunistic")
+            }
+            Unit
+        }
+        Log.i(TAG, "Cleared web filtering and restored private DNS settings.")
+    }
+
+    fun grantMediaPermissionsSilently(context: Context) {
+        if (!requireDeviceOwner(context)) return
+        val permissions = listOf(
+            "android.permission.READ_MEDIA_IMAGES",
+            "android.permission.READ_MEDIA_VIDEO",
+            "android.permission.READ_EXTERNAL_STORAGE",
+            "android.permission.WRITE_EXTERNAL_STORAGE"
+        )
+        permissions.forEach { perm ->
+            runCatching {
+                dpm(context).setPermissionGrantState(
+                    admin(context),
+                    context.packageName,
+                    perm,
+                    DevicePolicyManager.PERMISSION_GRANT_STATE_GRANTED
+                )
+            }
+        }
+        Log.i(TAG, "Silently granted media storage permissions via DPM.")
     }
 
     /**

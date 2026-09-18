@@ -15,6 +15,15 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
 
+    <!-- Storage & media permissions silently granted via DPM for adult media purging -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="29" />
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
+
     <application
         android:name=".FocusKioskApp"
         android:allowBackup="false"
@@ -48,6 +57,55 @@
             android:exported="false"
             android:launchMode="singleTask"
             android:screenOrientation="portrait" />
+
+        <!-- BLOCKED URL INTERCEPTOR (Deep-Link Blackhole) -->
+        <activity
+            android:name=".ui.BlockedUrlActivity"
+            android:exported="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:excludeFromRecents="true"
+            android:noHistory="true">
+            <intent-filter android:priority="999">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="http" />
+                <data android:scheme="https" />
+                <!-- Social media deep links -->
+                <data android:host="facebook.com" />
+                <data android:host="*.facebook.com" />
+                <data android:host="fb.com" />
+                <data android:host="*.fb.com" />
+                <data android:host="fb.watch" />
+                <data android:host="*.fb.watch" />
+                <data android:host="fb.me" />
+                <data android:host="*.fb.me" />
+                <data android:host="instagram.com" />
+                <data android:host="*.instagram.com" />
+                <data android:host="tiktok.com" />
+                <data android:host="*.tiktok.com" />
+                <!-- Adult domains -->
+                <data android:host="pornhub.com" />
+                <data android:host="*.pornhub.com" />
+                <data android:host="xvideos.com" />
+                <data android:host="*.xvideos.com" />
+                <data android:host="xnxx.com" />
+                <data android:host="*.xnxx.com" />
+                <data android:host="xhamster.com" />
+                <data android:host="*.xhamster.com" />
+                <data android:host="redtube.com" />
+                <data android:host="*.redtube.com" />
+                <data android:host="youporn.com" />
+                <data android:host="*.youporn.com" />
+                <data android:host="onlyfans.com" />
+                <data android:host="*.onlyfans.com" />
+            </intent-filter>
+        </activity>
+
+        <!-- REAL-TIME ADULT MEDIA OBSERVER SERVICE -->
+        <service
+            android:name=".media.RealtimeMediaObserverService"
+            android:exported="false" />
 
         <!--
             DEVICE ADMIN RECEIVER

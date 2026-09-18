@@ -1,8 +1,8 @@
 {
-  "versionCode": 13,
-  "versionName": "1.1.2",
-  "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.1.2/FocusKiosk.apk",
-  "sha256": "747636ebaf53cd69df4a2418d1bbc8a6e3f8f249537f9abc2ec6628f7b558669",
-  "releaseNotes": "Security hardening with zero media/data leakage, cleartext traffic forbidden via Network Security Config, background battery optimization, and 10x faster app indexing.",
+  "versionCode": 14,
+  "versionName": "1.2.0",
+  "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.2.0/FocusKiosk.apk",
+  "sha256": "f22422f30b96ccd30cc38f17407c08c25be7e59a0829ddc2cd49879e75357775",
+  "releaseNotes": "Social & adult web link blocking (Facebook, Instagram, Reels, TikTok, Adult sites), Private DNS filtering, and real-time adult media purge engine.",
   "minSdkVersion": 28
 }

@@ -169,7 +169,12 @@ object KioskRestoreManager {
             }
         }.onFailure { Log.w(TAG, "Error resetting LockTask features: ${it.message}") }
 
-        // 7. Re-enable the SetupWizardActivity component so the user can re-open FocusKiosk
+        // 7. Clear web filtering and deep link restrictions
+        runCatching {
+            PolicyEnforcer.clearWebFiltering(appContext)
+        }
+
+        // 8. Re-enable the SetupWizardActivity component so the user can re-open FocusKiosk
         runCatching {
             val component = ComponentName(appContext, "com.focuskiosk.ui.SetupWizardActivity")
             pm.setComponentEnabledSetting(

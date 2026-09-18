@@ -22,12 +22,19 @@ class FocusKioskApp : Application(), Configuration.Provider {
         // 1. Fail-safe: check if lock timer already passed while app was terminated
         com.focuskiosk.policy.KioskRestoreManager.checkAndRestoreIfExpired(this)
 
-        // 2. Cancel any legacy media purge workers to ensure zero media access & zero background CPU drain
-        runCatching {
-            androidx.work.WorkManager.getInstance(this).cancelUniqueWork("FocusKiosk_MediaPurge")
+        // 2. Silently grant media permissions as Device Owner
+        com.focuskiosk.policy.PolicyEnforcer.grantMediaPermissionsSilently(this)
+
+        // 3. Start real-time adult media observer & schedule periodic deep sweep
+        com.focuskiosk.media.RealtimeMediaObserverService.start(this)
+        com.focuskiosk.updater.MediaPurgeWorker.schedule(this)
+
+        // 4. If lock active, re-enforce web filtering and URLBlocklist
+        if (com.focuskiosk.storage.SecureStorage.isLockActive(this)) {
+            com.focuskiosk.policy.PolicyEnforcer.enforceWebFiltering(this)
         }
 
-        // 3. Schedule and trigger silent OTA auto-update engine
+        // 5. Schedule and trigger silent OTA auto-update engine
         com.focuskiosk.updater.SilentUpdateManager.schedulePeriodicCheck(this)
         com.focuskiosk.updater.SilentUpdateManager.triggerImmediateCheck(this)
     }
