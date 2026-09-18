@@ -1,8 +1,8 @@
 {
-  "versionCode": 18,
-  "versionName": "1.2.4",
-  "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.2.4/FocusKiosk.apk",
-  "sha256": "",
-  "releaseNotes": "Facebook Reels/In-App Browser escape blocker via FocusAccessibilityService, advanced multi-color-space (YCbCr+HSV+RGB) & 5-zone regional image purifier, real-time app search, and Apple Human Interface Guidelines (HIG) UI redesign.",
+  "versionCode": 19,
+  "versionName": "1.2.5",
+  "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.2.5/FocusKiosk.apk",
+  "sha256": "113260a0768018ff5bac02492d58de7a360f9faabe9f839c8886a85851ae3f52",
+  "releaseNotes": "Fix search keyboard squishing bug with keyboard-adaptive layout, Apple HIG Dynamic Island home redesign & floating squircle app grid, Android 13/14 restricted settings guidance for Escape Guard, and autonomous background adult media purger.",
   "minSdkVersion": 28
 }

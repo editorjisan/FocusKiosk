@@ -29,6 +29,10 @@ class AppGridAdapter(
     inner class AppViewHolder(private val b: ItemAppBinding)
         : RecyclerView.ViewHolder(b.root) {
 
+        init {
+            b.ivAppIcon.clipToOutline = true
+        }
+
         fun bind(app: AppInfo) {
             b.ivAppIcon.setImageDrawable(app.icon)
             b.tvAppName.text = app.label

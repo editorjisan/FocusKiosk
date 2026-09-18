@@ -42,16 +42,21 @@ object DurationParser {
         return cal.timeInMillis
     }
 
-    /** Formats a remaining-millisecond value as "Xd Xh Xm". */
+    /** Formats a remaining-millisecond value as "Xd Xh Xm" or "Xm Xs". */
     fun formatRemaining(remainingMs: Long): String {
         if (remainingMs <= 0) return "Unlocked"
         val days    = remainingMs / (1000L * 60 * 60 * 24)
         val hours   = (remainingMs % (1000L * 60 * 60 * 24)) / (1000L * 60 * 60)
         val minutes = (remainingMs % (1000L * 60 * 60)) / (1000L * 60)
+        val seconds = (remainingMs % (1000L * 60)) / 1000L
         return buildString {
-            if (days    > 0) append("${days}d ")
-            if (hours   > 0) append("${hours}h ")
-            append("${minutes}m")
+            if (days > 0) append("${days}d ")
+            if (hours > 0) append("${hours}h ")
+            if (days == 0L && hours == 0L) {
+                append("${minutes}m ${seconds}s")
+            } else {
+                append("${minutes}m")
+            }
         }.trim()
     }
 }

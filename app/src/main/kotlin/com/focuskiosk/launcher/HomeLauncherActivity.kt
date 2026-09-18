@@ -38,7 +38,7 @@ class HomeLauncherActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG             = "HomeLauncher"
-        private const val TICKER_INTERVAL = 10_000L // update countdown every 10 s
+        private const val TICKER_INTERVAL = 1_000L // real-time countdown every second
     }
 
     private lateinit var binding: ActivityHomeLauncherBinding
@@ -151,8 +151,8 @@ class HomeLauncherActivity : AppCompatActivity() {
         val unlockMs  = SecureStorage.getUnlockTimestampMs(this)
         val remaining = unlockMs - System.currentTimeMillis()
         binding.tvCountdown.text = if (remaining > 0)
-            "LOCK EXPIRES IN: ${DurationParser.formatRemaining(remaining)}"
+            DurationParser.formatRemaining(remaining)
         else
-            "FOCUS LOCK EXPIRED"
+            "EXPIRED"
     }
 }

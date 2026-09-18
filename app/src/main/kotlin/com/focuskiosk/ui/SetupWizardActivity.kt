@@ -1,15 +1,25 @@
 package com.focuskiosk.ui
 
+import android.app.Dialog
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
+import android.view.View
+import android.view.ViewGroup
 import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.focuskiosk.databinding.ActivitySetupWizardBinding
 import com.focuskiosk.launcher.AppInfo
 import com.focuskiosk.launcher.HomeLauncherActivity
@@ -73,6 +83,36 @@ class SetupWizardActivity : AppCompatActivity() {
 
         binding.tvVersionInfo.text = "v${com.focuskiosk.BuildConfig.VERSION_NAME} (Build ${com.focuskiosk.BuildConfig.VERSION_CODE})"
 
+        // Intercept Back button during active search to dismiss keyboard & restore bottom panel
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (binding.etSearchApps.hasFocus() || binding.tvCancelSearch.visibility == View.VISIBLE || !binding.etSearchApps.text.isNullOrEmpty()) {
+                    binding.etSearchApps.text?.clear()
+                    setSearchModeActive(false)
+                } else {
+                    isEnabled = false
+                    onBackPressedDispatcher.onBackPressed()
+                }
+            }
+        })
+
+        // Observe soft keyboard visibility: hide controlsPanel and headers to give rvSelectApps 100% of space
+        ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, insets ->
+            val imeVisible = insets.isVisible(WindowInsetsCompat.Type.ime())
+            if (imeVisible) {
+                binding.controlsPanel.visibility = View.GONE
+                binding.otaUpdateCard.visibility = View.GONE
+                binding.headerTitleLayout.visibility = View.GONE
+                binding.tvCancelSearch.visibility = View.VISIBLE
+            } else if (!binding.etSearchApps.hasFocus() && binding.etSearchApps.text.isNullOrEmpty()) {
+                binding.controlsPanel.visibility = View.VISIBLE
+                binding.otaUpdateCard.visibility = View.VISIBLE
+                binding.headerTitleLayout.visibility = View.VISIBLE
+                binding.tvCancelSearch.visibility = View.GONE
+            }
+            insets
+        }
+
         setupList()
         setupSearchBar()
         setupDurationControls()
@@ -93,12 +133,14 @@ class SetupWizardActivity : AppCompatActivity() {
 
         // Ensure sideloading and APK installs are never restricted
         PolicyEnforcer.unblockAppInstalls(this)
+        PolicyEnforcer.unrestrictSettingsSilently(this)
     }
 
     override fun onResume() {
         super.onResume()
         // Ensure sideloading and APK installs are never restricted
         PolicyEnforcer.unblockAppInstalls(this)
+        PolicyEnforcer.unrestrictSettingsSilently(this)
 
         val deviceContext = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             createDeviceProtectedStorageContext()
@@ -139,29 +181,97 @@ class SetupWizardActivity : AppCompatActivity() {
 
     private fun setupList() {
         selectAdapter = AppSelectAdapter()
-        // LinearLayoutManager with smooth scroll; nestedScrollingEnabled false
-        // prevents the RecyclerView fighting with ConstraintLayout parent.
         val lm = LinearLayoutManager(this)
         binding.rvSelectApps.layoutManager = lm
         binding.rvSelectApps.adapter = selectAdapter
         binding.rvSelectApps.setHasFixedSize(false)
         binding.rvSelectApps.isNestedScrollingEnabled = true
+
+        // Dismiss keyboard when dragging/scrolling results
+        binding.rvSelectApps.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+            override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
+                if (newState == RecyclerView.SCROLL_STATE_DRAGGING) {
+                    val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager
+                    imm?.hideSoftInputFromWindow(binding.etSearchApps.windowToken, 0)
+                    binding.etSearchApps.clearFocus()
+                    if (binding.etSearchApps.text.isNullOrEmpty()) {
+                        setSearchModeActive(false)
+                    } else {
+                        binding.controlsPanel.visibility = View.VISIBLE
+                        binding.otaUpdateCard.visibility = View.VISIBLE
+                        binding.headerTitleLayout.visibility = View.VISIBLE
+                        binding.tvCancelSearch.visibility = View.GONE
+                    }
+                }
+            }
+        })
+    }
+
+    private fun setSearchModeActive(active: Boolean) {
+        if (active) {
+            binding.controlsPanel.visibility = View.GONE
+            binding.otaUpdateCard.visibility = View.GONE
+            binding.headerTitleLayout.visibility = View.GONE
+            binding.tvCancelSearch.visibility = View.VISIBLE
+        } else {
+            binding.controlsPanel.visibility = View.VISIBLE
+            binding.otaUpdateCard.visibility = View.VISIBLE
+            binding.headerTitleLayout.visibility = View.VISIBLE
+            binding.tvCancelSearch.visibility = View.GONE
+            binding.etSearchApps.clearFocus()
+            val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager
+            imm?.hideSoftInputFromWindow(binding.etSearchApps.windowToken, 0)
+        }
     }
 
     private fun setupSearchBar() {
+        binding.etSearchApps.setOnFocusChangeListener { _, hasFocus ->
+            if (hasFocus) {
+                setSearchModeActive(true)
+            }
+        }
+
         binding.etSearchApps.addTextChangedListener(object : android.text.TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                 val q = s?.toString() ?: ""
                 selectAdapter.filter(q)
-                binding.btnClearSearch.visibility = if (q.isNotEmpty()) android.view.View.VISIBLE else android.view.View.GONE
-                binding.tvNoAppsFound.visibility = if (selectAdapter.itemCount == 0) android.view.View.VISIBLE else android.view.View.GONE
+                binding.btnClearSearch.visibility = if (q.isNotEmpty()) View.VISIBLE else View.GONE
+                binding.tvNoAppsFound.visibility = if (selectAdapter.itemCount == 0) View.VISIBLE else View.GONE
+                if (q.isNotEmpty()) {
+                    setSearchModeActive(true)
+                }
             }
             override fun afterTextChanged(s: android.text.Editable?) {}
         })
 
+        binding.tvCancelSearch.setOnClickListener {
+            binding.etSearchApps.text?.clear()
+            setSearchModeActive(false)
+        }
+
         binding.btnClearSearch.setOnClickListener {
             binding.etSearchApps.text?.clear()
+        }
+
+        binding.etSearchApps.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_DONE ||
+                actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH) {
+                val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager
+                imm?.hideSoftInputFromWindow(binding.etSearchApps.windowToken, 0)
+                binding.etSearchApps.clearFocus()
+                if (binding.etSearchApps.text.isNullOrEmpty()) {
+                    setSearchModeActive(false)
+                } else {
+                    binding.controlsPanel.visibility = View.VISIBLE
+                    binding.otaUpdateCard.visibility = View.VISIBLE
+                    binding.headerTitleLayout.visibility = View.VISIBLE
+                    binding.tvCancelSearch.visibility = View.GONE
+                }
+                true
+            } else {
+                false
+            }
         }
     }
 
@@ -366,40 +476,70 @@ class SetupWizardActivity : AppCompatActivity() {
         val previewText = binding.tvDurationPreview.text.toString()
 
         if (!com.focuskiosk.service.FocusAccessibilityService.isEnabled(this)) {
-            AlertDialog.Builder(this)
-                .setTitle("Enable Escape Guard")
-                .setMessage(
-                    "To prevent Facebook Reels and social web browsing from bypassing the lock inside Messenger, " +
-                    "please enable Focus Kiosk in Accessibility settings."
-                )
-                .setPositiveButton("Open Settings") { _, _ ->
-                    startActivity(Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS))
-                }
-                .setNegativeButton("Continue Anyway") { _, _ ->
-                    showFinalLockConfirm(whitelist, unlockTs, previewText)
-                }
-                .show()
+            showAppleEscapeGuardDialog(whitelist, unlockTs, previewText)
             return
         }
 
-        showFinalLockConfirm(whitelist, unlockTs, previewText)
+        showAppleLockConfirmDialog(whitelist, unlockTs, previewText)
     }
 
-    private fun showFinalLockConfirm(whitelist: Set<String>, unlockTs: Long, previewText: String) {
-        AlertDialog.Builder(this)
-            .setTitle("Confirm Focus Lock")
-            .setMessage(
-                "You are about to lock this device.\n" +
-                "$previewText\n\n" +
-                "${whitelist.size} apps will remain accessible.\n" +
-                "All other apps will be hidden and suspended.\n" +
-                "This CANNOT be undone before the timer expires.\n\n" +
-                "Are you absolutely sure?"
-            )
-            .setPositiveButton("Lock Now") { _, _ -> applyLock(whitelist, unlockTs) }
-            .setNegativeButton("Cancel", null)
-            .setCancelable(false)
-            .show()
+    private fun showAppleEscapeGuardDialog(whitelist: Set<String>, unlockTs: Long, previewText: String) {
+        val dialog = Dialog(this)
+        val dialogBinding = com.focuskiosk.databinding.DialogIosEscapeGuardBinding.inflate(layoutInflater)
+        dialog.setContentView(dialogBinding.root)
+        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+        val width = (resources.displayMetrics.widthPixels * 0.90).toInt()
+        dialog.window?.setLayout(width, ViewGroup.LayoutParams.WRAP_CONTENT)
+
+        // Step 1: Open App Info for 3 dots -> Allow restricted settings
+        dialogBinding.btnOpenAppInfo.setOnClickListener {
+            runCatching {
+                val intent = Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = android.net.Uri.parse("package:$packageName")
+                }
+                startActivity(intent)
+            }.onFailure {
+                Toast.makeText(this, "Could not open App Info", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        // Step 2: Open Accessibility Settings
+        dialogBinding.btnOpenAccessibility.setOnClickListener {
+            startActivity(Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS))
+            dialog.dismiss()
+        }
+
+        // Action 3: Continue Without Guard
+        dialogBinding.btnContinueAnyway.setOnClickListener {
+            dialog.dismiss()
+            showAppleLockConfirmDialog(whitelist, unlockTs, previewText)
+        }
+
+        dialog.show()
+    }
+
+    private fun showAppleLockConfirmDialog(whitelist: Set<String>, unlockTs: Long, previewText: String) {
+        val dialog = Dialog(this)
+        val dialogBinding = com.focuskiosk.databinding.DialogIosConfirmLockBinding.inflate(layoutInflater)
+        dialog.setContentView(dialogBinding.root)
+        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+        val width = (resources.displayMetrics.widthPixels * 0.90).toInt()
+        dialog.window?.setLayout(width, ViewGroup.LayoutParams.WRAP_CONTENT)
+        dialog.setCancelable(false)
+
+        dialogBinding.tvConfirmDuration.text = previewText
+        dialogBinding.tvConfirmWhitelistCount.text = "${whitelist.size} apps will remain accessible"
+
+        dialogBinding.btnConfirmLockNow.setOnClickListener {
+            dialog.dismiss()
+            applyLock(whitelist, unlockTs)
+        }
+
+        dialogBinding.btnConfirmCancel.setOnClickListener {
+            dialog.dismiss()
+        }
+
+        dialog.show()
     }
 
     private fun applyLock(whitelist: Set<String>, unlockTs: Long) {

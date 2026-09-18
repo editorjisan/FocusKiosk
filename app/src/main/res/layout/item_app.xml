@@ -1,48 +1,60 @@
 <?xml version="1.0" encoding="utf-8"?>
-<com.google.android.material.card.MaterialCardView
+<!--
+    item_app.xml
+    Apple iOS SpringBoard app grid icon:
+    - Clean floating squircle icon (no rectangular card box)
+    - 60dp x 60dp smooth squircle shape
+    - High-legibility SF-style label with subtle drop shadow
+    - Borderless iOS spring ripple feedback
+-->
+<LinearLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_margin="6dp"
+    android:orientation="vertical"
+    android:gravity="center_horizontal"
     android:clickable="true"
     android:focusable="true"
-    android:foreground="?attr/selectableItemBackground"
-    app:cardCornerRadius="18dp"
-    app:cardElevation="0dp"
-    app:strokeWidth="1dp"
-    app:strokeColor="#202235"
-    app:cardBackgroundColor="#131422">
+    android:background="?attr/selectableItemBackgroundBorderless"
+    android:paddingStart="4dp"
+    android:paddingEnd="4dp"
+    android:paddingTop="10dp"
+    android:paddingBottom="12dp">
 
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:gravity="center"
-        android:paddingTop="16dp"
-        android:paddingBottom="14dp"
-        android:paddingStart="8dp"
-        android:paddingEnd="8dp">
+    <!-- iOS Squircle App Icon Container -->
+    <FrameLayout
+        android:layout_width="60dp"
+        android:layout_height="60dp"
+        android:layout_gravity="center_horizontal">
 
         <ImageView
             android:id="@+id/ivAppIcon"
-            android:layout_width="54dp"
-            android:layout_height="54dp"
-            android:scaleType="fitCenter"
+            android:layout_width="60dp"
+            android:layout_height="60dp"
+            android:scaleType="centerCrop"
+            android:background="@drawable/bg_ios_icon_squircle"
+            android:clipToOutline="true"
             android:contentDescription="App Icon" />
+    </FrameLayout>
 
-        <TextView
-            android:id="@+id/tvAppName"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:textColor="#EAEAF2"
-            android:textSize="11sp"
-            android:fontFamily="sans-serif-medium"
-            android:gravity="center"
-            android:maxLines="1"
-            android:ellipsize="end" />
+    <!-- iOS App Label -->
+    <TextView
+        android:id="@+id/tvAppName"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:textColor="#FFFFFF"
+        android:textSize="12sp"
+        android:fontFamily="sans-serif-medium"
+        android:gravity="center"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:paddingStart="2dp"
+        android:paddingEnd="2dp"
+        android:shadowColor="#99000000"
+        android:shadowDx="0"
+        android:shadowDy="1"
+        android:shadowRadius="2" />
 
-    </LinearLayout>
-
-</com.google.android.material.card.MaterialCardView>
+</LinearLayout>

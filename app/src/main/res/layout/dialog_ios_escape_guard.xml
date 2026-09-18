@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@drawable/bg_ios_dialog"
+    android:padding="20dp">
+
+    <!-- Header Icon -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:layout_marginBottom="12dp">
+
+        <ImageView
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:src="@drawable/ic_shield"
+            app:tint="#007AFF"
+            android:contentDescription="Escape Guard" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/tvEscapeGuardTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Enable Escape Guard"
+        android:textColor="#FFFFFF"
+        android:textSize="18sp"
+        android:fontFamily="sans-serif-medium"
+        android:textStyle="bold"
+        android:gravity="center" />
+
+    <TextView
+        android:id="@+id/tvEscapeGuardMsg"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="To prevent Facebook Reels and social web browsing from bypassing the lock inside Messenger, enable Focus Kiosk in Accessibility."
+        android:textColor="#8E8E93"
+        android:textSize="13sp"
+        android:lineSpacingExtra="3dp"
+        android:gravity="center" />
+
+    <!-- Android 13+ Guidance Inset Box -->
+    <LinearLayout
+        android:id="@+id/cardAndroid13Help"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="@drawable/bg_ios_card"
+        android:padding="12dp"
+        android:layout_marginTop="14dp"
+        android:layout_marginBottom="14dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Notice for Android 13 / 14 / 15:"
+            android:textColor="#FF9F0A"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:fontFamily="sans-serif-medium" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="If Android shows 'Restricted setting':\n1. Tap '1. Allow in App Info' below\n2. Tap the 3 dots (⋮) in the top-right corner\n3. Tap 'Allow restricted settings'\n4. Return here and tap '2. Open Accessibility'"
+            android:textColor="#E5E5EA"
+            android:textSize="11sp"
+            android:lineSpacingExtra="2dp" />
+    </LinearLayout>
+
+    <!-- Action 1: Open App Info -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnOpenAppInfo"
+        style="@style/Widget.MaterialComponents.Button"
+        android:layout_width="match_parent"
+        android:layout_height="44dp"
+        android:text="1. Allow in App Info (3 Dots)"
+        android:textColor="#FFFFFF"
+        android:textSize="13sp"
+        android:fontFamily="sans-serif-medium"
+        app:cornerRadius="12dp"
+        android:backgroundTint="#2C2C2E"
+        android:layout_marginBottom="8dp" />
+
+    <!-- Action 2: Open Accessibility Settings -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnOpenAccessibility"
+        style="@style/Widget.MaterialComponents.Button"
+        android:layout_width="match_parent"
+        android:layout_height="46dp"
+        android:text="2. Open Accessibility Settings"
+        android:textColor="#FFFFFF"
+        android:textSize="14sp"
+        android:fontFamily="sans-serif-medium"
+        android:textStyle="bold"
+        app:cornerRadius="12dp"
+        android:backgroundTint="#007AFF"
+        android:layout_marginBottom="8dp" />
+
+    <!-- Action 3: Continue Anyway -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnContinueAnyway"
+        style="@style/Widget.MaterialComponents.Button.TextButton"
+        android:layout_width="match_parent"
+        android:layout_height="38dp"
+        android:text="Continue Without Guard"
+        android:textColor="#8E8E93"
+        android:textSize="12sp" />
+
+</LinearLayout>

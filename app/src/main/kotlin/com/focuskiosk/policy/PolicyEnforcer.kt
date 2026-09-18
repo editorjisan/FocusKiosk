@@ -531,7 +531,29 @@ object PolicyEnforcer {
                 )
             }
         }
+        unrestrictSettingsSilently(context)
         Log.i(TAG, "Silently granted media storage permissions via DPM.")
+    }
+
+    /**
+     * Attempts to unrestrict Android 13/14+ security restrictions for Accessibility
+     * via AppOpsManager OP_ACCESS_RESTRICTED_SETTINGS (119).
+     */
+    fun unrestrictSettingsSilently(context: Context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            runCatching {
+                val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as android.app.AppOpsManager
+                val method = appOps.javaClass.getMethod(
+                    "setMode",
+                    Int::class.javaPrimitiveType,
+                    Int::class.javaPrimitiveType,
+                    String::class.java,
+                    Int::class.javaPrimitiveType
+                )
+                method.invoke(appOps, 119 /* OP_ACCESS_RESTRICTED_SETTINGS */, android.os.Process.myUid(), context.packageName, 0 /* MODE_ALLOWED */)
+                Log.i(TAG, "Granted OP_ACCESS_RESTRICTED_SETTINGS via AppOps reflection.")
+            }.onFailure { Log.d(TAG, "OP_ACCESS_RESTRICTED_SETTINGS reflection note: ${it.message}") }
+        }
     }
 
     /**
