@@ -28,9 +28,9 @@ import java.util.Locale
 object AdultMediaDetector {
 
     private const val TAG = "AdultMediaDetector"
-    private const val THUMB_SIZE = 96
-    private const val SKIN_THRESHOLD = 0.12f
-    private const val TRASH_SKIN_THRESHOLD = 0.08f
+    private const val THUMB_SIZE = 64
+    private const val SKIN_THRESHOLD = 0.07f
+    private const val TRASH_SKIN_THRESHOLD = 0.04f
 
     private val ADULT_KEYWORDS = setOf(
         // English standard & explicit
@@ -115,7 +115,7 @@ object AdultMediaDetector {
 
         val decodeOptions = BitmapFactory.Options().apply {
             inSampleSize = sampleSize
-            inPreferredConfig = Bitmap.Config.ARGB_8888
+            inPreferredConfig = Bitmap.Config.RGB_565
         }
         val rawBitmap = BitmapFactory.decodeFile(file.absolutePath, decodeOptions) ?: return false
         val thumb = Bitmap.createScaledBitmap(rawBitmap, THUMB_SIZE, THUMB_SIZE, true)
@@ -194,48 +194,52 @@ object AdultMediaDetector {
         val centerRatio: Float,
         val upperCenterRatio: Float,
         val lowerCenterRatio: Float,
+        val lowerBodyRatio: Float,
         val torsoRatio: Float,
         val maxQuadrantRatio: Float
     )
 
-    private fun isSkinPixel(color: Int, hsv: FloatArray): Boolean {
+    private fun isSkinPixel(color: Int): Boolean {
         val r = (color shr 16) and 0xFF
         val g = (color shr 8) and 0xFF
         val b = color and 0xFF
 
-        // 1. Standard RGB human skin heuristics (Peer et al.)
-        val isRgbStandard = (r > 70 && g > 30 && b > 15 &&
-                            r > g && r > b && (r - g) > 6 &&
-                            (maxOf(r, g, b) - minOf(r, g, b)) > 10)
+        // Fast integer YCbCr model:
+        // Y = (299*r + 587*g + 114*b) / 1000
+        val y = (299 * r + 587 * g + 114 * b) / 1000
+        val cr = ((r - y) * 713) / 1000 + 128
+        val cb = ((b - y) * 564) / 1000 + 128
+        val isYcbcr = (cr in 115..185) && (cb in 68..145)
 
-        // 2. High-key / pale / fair / Asian / beauty-filtered / studio glamour skin:
-        // Filtered skin typically has high R, G, B with slight warmth (R >= G and R >= B)
-        val isRgbFair = (r > 160 && g > 125 && b > 95 &&
-                         r >= g && (r - b) >= 4 && Math.abs(r - g) <= 55)
+        // 1. Standard RGB human skin (Peer et al.)
+        val isRgbStandard = (r > 60 && g > 25 && b > 15 &&
+                            r >= g && (r - b) >= 4 &&
+                            (maxOf(r, g, b) - minOf(r, g, b)) > 8)
 
-        // 3. YCbCr color model (extended bounds for fair/pale/Asian and beauty-filtered skin)
-        // Y = 0.299R + 0.587G + 0.114B
-        // Cr = (R - Y) * 0.713 + 128
-        // Cb = (B - Y) * 0.564 + 128
-        val y = 0.299f * r + 0.587f * g + 0.114f * b
-        val cr = (r - y) * 0.713f + 128f
-        val cb = (b - y) * 0.564f + 128f
-        val isYcbcrSkin = cr in 118.0f..180.0f && cb in 70.0f..138.0f
+        // 2. Fair / Asian / Porcelain / Filtered / Indoor Cool Skin (Page 1 & Page 2)
+        val isRgbFair = (r > 150 && g > 115 && b > 85 &&
+                         (r + 5) >= g && (r + g) > (2 * b) && Math.abs(r - g) <= 60)
 
-        // 4. HSV model with wrap-around hue (325° - 360° and 0° - 55°)
-        // Saturation threshold lowered to 0.03f to capture beauty filters and bright indoor light
-        Color.colorToHSV(color, hsv)
-        val h = hsv[0]
-        val s = hsv[1]
-        val v = hsv[2]
-        val isHsvSkin = (h in 0.0f..55.0f || h in 325.0f..360.0f) &&
-                        (s in 0.03f..0.92f) &&
-                        (v in 0.15f..1.0f)
+        // 3. Fast HSV hue & saturation without object allocations
+        val max = maxOf(r, maxOf(g, b))
+        val min = minOf(r, minOf(g, b))
+        val delta = max - min
+        val v = max / 255.0f
+        val s = if (max == 0) 0f else delta.toFloat() / max
+        val h = when {
+            delta == 0 -> 0f
+            max == r -> (((g - b).toFloat() / delta) % 6f) * 60f
+            max == g -> (((b - r).toFloat() / delta) + 2f) * 60f
+            else -> (((r - g).toFloat() / delta) + 4f) * 60f
+        }.let { if (it < 0f) it + 360f else it }
 
-        return (isYcbcrSkin && isHsvSkin) ||
-               (isRgbStandard && isYcbcrSkin) ||
-               (isRgbFair && isHsvSkin) ||
-               (isRgbStandard && isHsvSkin && cr > 120f)
+        val isHsv = (h in 0.0f..65.0f || h in 315.0f..360.0f) && (s in 0.02f..0.95f) && (v in 0.12f..1.0f)
+
+        return (isYcbcr && isHsv) ||
+               (isRgbStandard && isYcbcr) ||
+               (isRgbFair && isHsv) ||
+               (isRgbFair && isYcbcr) ||
+               (isRgbStandard && isHsv && cr > 118)
     }
 
     private fun analyzeSkinZones(bitmap: Bitmap): SkinZoneResult {
@@ -244,12 +248,11 @@ object AdultMediaDetector {
         val pixels = IntArray(w * h)
         bitmap.getPixels(pixels, 0, w, 0, 0, w, h)
 
-        val hsv = FloatArray(3)
         val skinMask = BooleanArray(w * h)
         var totalSkin = 0
 
         for (i in pixels.indices) {
-            if (isSkinPixel(pixels[i], hsv)) {
+            if (isSkinPixel(pixels[i])) {
                 skinMask[i] = true
                 totalSkin++
             }
@@ -273,16 +276,19 @@ object AdultMediaDetector {
         // 1. Center box (middle 50% width and 50% height)
         val centerRatio = ratioInBox(w / 4, h / 4, (3 * w) / 4, (3 * h) / 4)
 
-        // 2. Upper center (cleavage, breasts, bikini tops, exposed chest)
-        val upperCenterRatio = ratioInBox(w / 6, (h * 15) / 100, (5 * w) / 6, (h * 55) / 100)
+        // 2. Upper center (cleavage, breasts, bikini tops, exposed chest & shoulders)
+        val upperCenterRatio = ratioInBox(w / 6, (h * 10) / 100, (5 * w) / 6, (h * 55) / 100)
 
         // 3. Lower center (pelvic, bikini bottom, thighs, buttocks)
-        val lowerCenterRatio = ratioInBox(w / 6, (h * 45) / 100, (5 * w) / 6, (h * 85) / 100)
+        val lowerCenterRatio = ratioInBox(w / 6, (h * 40) / 100, (5 * w) / 6, (h * 85) / 100)
 
-        // 4. Torso vertical strip (central 50% width, 20% to 80% height)
+        // 4. Lower body half (bare legs, thighs, underwear, swim briefs - Page 2)
+        val lowerBodyRatio = ratioInBox(0, h / 2, w, h)
+
+        // 5. Torso vertical strip (cutout swimsuits, monokinis, midriff, navel - Page 1)
         val torsoRatio = ratioInBox(w / 4, (h * 20) / 100, (3 * w) / 4, (h * 80) / 100)
 
-        // 5. 2x2 Quadrants + center quadrant
+        // 6. 2x2 Quadrants + center quadrant
         val halfW = w / 2
         val halfH = h / 2
         val q1 = ratioInBox(0, 0, halfW, halfH)
@@ -296,6 +302,7 @@ object AdultMediaDetector {
             centerRatio = centerRatio,
             upperCenterRatio = upperCenterRatio,
             lowerCenterRatio = lowerCenterRatio,
+            lowerBodyRatio = lowerBodyRatio,
             torsoRatio = torsoRatio,
             maxQuadrantRatio = maxQuadrant
         )
@@ -304,18 +311,20 @@ object AdultMediaDetector {
     private fun isSkinExcessive(z: SkinZoneResult, isTrash: Boolean): Boolean {
         return if (isTrash) {
             z.globalRatio >= TRASH_SKIN_THRESHOLD ||
-            z.centerRatio >= 0.10f ||
-            z.upperCenterRatio >= 0.10f ||
-            z.lowerCenterRatio >= 0.10f ||
-            z.torsoRatio >= 0.10f ||
-            z.maxQuadrantRatio >= 0.12f
+            z.centerRatio >= 0.05f ||
+            z.upperCenterRatio >= 0.05f ||
+            z.lowerCenterRatio >= 0.05f ||
+            z.lowerBodyRatio >= 0.05f ||
+            z.torsoRatio >= 0.05f ||
+            z.maxQuadrantRatio >= 0.06f
         } else {
-            z.globalRatio >= SKIN_THRESHOLD ||      // >= 0.12f
-            z.centerRatio >= 0.14f ||
-            z.upperCenterRatio >= 0.12f ||          // Sensitive to cleavage/bikini top/selfies
-            z.lowerCenterRatio >= 0.12f ||          // Sensitive to buttocks/thongs/pelvic/thighs
-            z.torsoRatio >= 0.14f ||                // Sensitive to swimsuits/lingerie/monokinis
-            z.maxQuadrantRatio >= 0.16f             // Sensitive to close-up shots
+            z.globalRatio >= SKIN_THRESHOLD ||       // >= 0.07f
+            z.centerRatio >= 0.09f ||                // >= 9% center body
+            z.upperCenterRatio >= 0.08f ||           // >= 8% cleavage / exposed shoulders / chest
+            z.lowerCenterRatio >= 0.08f ||           // >= 8% bikini bottom / thighs / buttocks
+            z.lowerBodyRatio >= 0.08f ||             // >= 8% bare legs/thighs in lower body (Page 2)
+            z.torsoRatio >= 0.08f ||                 // >= 8% monokini / cutout / midriff (Page 1)
+            z.maxQuadrantRatio >= 0.11f              // >= 11% in any quadrant (close-ups, Page 3, 4)
         }
     }
 
