@@ -28,9 +28,9 @@ import java.util.Locale
 object AdultMediaDetector {
 
     private const val TAG = "AdultMediaDetector"
-    private const val THUMB_SIZE = 64
-    private const val SKIN_THRESHOLD = 0.22f // 22% skin-tone coverage flags as explicit/revealing (bikini, swimwear, memes)
-    private const val TRASH_SKIN_THRESHOLD = 0.16f // 16% threshold for items found in trash/recycle bins
+    private const val THUMB_SIZE = 96
+    private const val SKIN_THRESHOLD = 0.17f
+    private const val TRASH_SKIN_THRESHOLD = 0.12f
 
     private val ADULT_KEYWORDS = setOf(
         // English standard & explicit
@@ -87,7 +87,7 @@ object AdultMediaDetector {
             }
         }
 
-        // ── Tier 2: Visual HSV Skin-Tone Classification ───────────────────────
+        // ── Tier 2: Multi-Color Space (YCbCr + HSV + RGB) Regional Classifier ─
         val ext = file.extension.lowercase(Locale.ROOT)
         return try {
             when {
@@ -115,19 +115,24 @@ object AdultMediaDetector {
 
         val decodeOptions = BitmapFactory.Options().apply {
             inSampleSize = sampleSize
-            inPreferredConfig = Bitmap.Config.RGB_565
+            inPreferredConfig = Bitmap.Config.ARGB_8888
         }
         val rawBitmap = BitmapFactory.decodeFile(file.absolutePath, decodeOptions) ?: return false
         val thumb = Bitmap.createScaledBitmap(rawBitmap, THUMB_SIZE, THUMB_SIZE, true)
         if (thumb != rawBitmap) rawBitmap.recycle()
 
-        val ratio = calculateSkinRatio(thumb)
+        val zones = analyzeSkinZones(thumb)
         thumb.recycle()
 
-        val threshold = if (isTrash) TRASH_SKIN_THRESHOLD else SKIN_THRESHOLD
-        val isSkinHeavy = ratio >= threshold
+        val isSkinHeavy = isSkinExcessive(zones, isTrash)
         if (isSkinHeavy) {
-            Log.w(TAG, "Tier 2 Image Trigger: Skin ratio $ratio >= $threshold for '${file.name}' (isTrash=$isTrash)")
+            Log.w(
+                TAG,
+                "Tier 2 Image Trigger: '${file.name}' (isTrash=$isTrash) -> " +
+                "Global=${zones.globalRatio}, Center=${zones.centerRatio}, " +
+                "UpperCenter=${zones.upperCenterRatio}, LowerCenter=${zones.lowerCenterRatio}, " +
+                "MaxQuad=${zones.maxQuadrantRatio}"
+            )
         }
         return isSkinHeavy
     }
@@ -153,9 +158,6 @@ object AdultMediaDetector {
                 listOf(500_000L, 1_500_000L)
             }
 
-            val singleThreshold = if (isTrash) 0.22f else 0.28f
-            val multiThreshold = if (isTrash) 0.14f else 0.18f
-
             var skinTriggerCount = 0
             for (timeUs in checkpoints) {
                 val rawFrame = retriever.getFrameAtTime(timeUs, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
@@ -163,20 +165,20 @@ object AdultMediaDetector {
                 val thumb = Bitmap.createScaledBitmap(rawFrame, THUMB_SIZE, THUMB_SIZE, true)
                 if (thumb != rawFrame) rawFrame.recycle()
 
-                val ratio = calculateSkinRatio(thumb)
+                val zones = analyzeSkinZones(thumb)
                 thumb.recycle()
 
-                if (ratio >= multiThreshold) {
+                if (isSkinExcessive(zones, isTrash)) {
                     skinTriggerCount++
-                    if (ratio >= singleThreshold || skinTriggerCount >= 2) {
-                        Log.w(TAG, "Tier 2 Video Trigger: Skin ratio $ratio at ${timeUs / 1000}ms for '${file.name}' (isTrash=$isTrash)")
+                    if (zones.globalRatio >= 0.25f || zones.centerRatio >= 0.30f || skinTriggerCount >= 2) {
+                        Log.w(TAG, "Tier 2 Video Trigger: Positive frame at ${timeUs / 1000}ms for '${file.name}'")
                         return true
                     }
                 }
             }
             val triggered = skinTriggerCount > 0 && isTrash
             if (triggered) {
-                Log.w(TAG, "Tier 2 Trash Video Triggered: Skin checkpoints positive for '${file.name}'")
+                Log.w(TAG, "Tier 2 Trash Video Triggered: Checkpoints positive for '${file.name}'")
             }
             triggered
         } catch (e: Exception) {
@@ -187,25 +189,119 @@ object AdultMediaDetector {
         }
     }
 
-    private fun calculateSkinRatio(bitmap: Bitmap): Float {
-        val pixels = IntArray(THUMB_SIZE * THUMB_SIZE)
-        bitmap.getPixels(pixels, 0, THUMB_SIZE, 0, 0, THUMB_SIZE, THUMB_SIZE)
+    private data class SkinZoneResult(
+        val globalRatio: Float,
+        val centerRatio: Float,
+        val upperCenterRatio: Float,
+        val lowerCenterRatio: Float,
+        val maxQuadrantRatio: Float
+    )
 
-        var skinCount = 0
+    private fun isSkinPixel(color: Int, hsv: FloatArray): Boolean {
+        val r = (color shr 16) and 0xFF
+        val g = (color shr 8) and 0xFF
+        val b = color and 0xFF
+
+        // 1. RGB human skin heuristics (Peer et al. + daylight/flash models)
+        val isRgbSkin = (r > 80 && g > 35 && b > 20 &&
+                        r > g && r > b && (r - g) > 10 &&
+                        (Math.max(r, Math.max(g, b)) - Math.min(r, Math.min(g, b))) > 12) ||
+                       (r > 205 && g > 190 && b > 145 && Math.abs(r - g) <= 25 && r > b && g > b)
+
+        // 2. YCbCr color model (Kovac / Vezhnevets et al.)
+        // Y = 0.299R + 0.587G + 0.114B
+        // Cr = (R - Y) * 0.713 + 128
+        // Cb = (B - Y) * 0.564 + 128
+        val y = 0.299f * r + 0.587f * g + 0.114f * b
+        val cr = (r - y) * 0.713f + 128f
+        val cb = (b - y) * 0.564f + 128f
+        val isYcbcrSkin = cr in 133.0f..175.0f && cb in 75.0f..130.0f
+
+        // 3. HSV model with wrap-around hue (330° - 360° and 0° - 50°)
+        Color.colorToHSV(color, hsv)
+        val h = hsv[0]
+        val s = hsv[1]
+        val v = hsv[2]
+        val isHsvSkin = (h in 0.0f..50.0f || h in 330.0f..360.0f) &&
+                        (s in 0.07f..0.88f) &&
+                        (v in 0.20f..1.0f)
+
+        return (isYcbcrSkin && isHsvSkin) || (isRgbSkin && isYcbcrSkin) || (isRgbSkin && isHsvSkin && cr > 130f)
+    }
+
+    private fun analyzeSkinZones(bitmap: Bitmap): SkinZoneResult {
+        val w = bitmap.width
+        val h = bitmap.height
+        val pixels = IntArray(w * h)
+        bitmap.getPixels(pixels, 0, w, 0, 0, w, h)
+
         val hsv = FloatArray(3)
+        val skinMask = BooleanArray(w * h)
+        var totalSkin = 0
 
-        for (pixel in pixels) {
-            Color.colorToHSV(pixel, hsv)
-            val h = hsv[0] // 0 to 360
-            val s = hsv[1] // 0.0 to 1.0
-            val v = hsv[2] // 0.0 to 1.0
-
-            // Human skin tone in HSV color space across diverse ethnicities
-            if (h in 0.0f..50.0f && s in 0.15f..0.75f && v in 0.28f..1.0f) {
-                skinCount++
+        for (i in pixels.indices) {
+            if (isSkinPixel(pixels[i], hsv)) {
+                skinMask[i] = true
+                totalSkin++
             }
         }
-        return skinCount.toFloat() / (THUMB_SIZE * THUMB_SIZE)
+
+        val globalRatio = totalSkin.toFloat() / (w * h)
+
+        fun ratioInBox(x1: Int, y1: Int, x2: Int, y2: Int): Float {
+            var count = 0
+            val total = (x2 - x1) * (y2 - y1)
+            if (total <= 0) return 0f
+            for (y in y1 until y2) {
+                val rowOffset = y * w
+                for (x in x1 until x2) {
+                    if (skinMask[rowOffset + x]) count++
+                }
+            }
+            return count.toFloat() / total
+        }
+
+        // 1. Center box (middle 50% width and 50% height)
+        val centerRatio = ratioInBox(w / 4, h / 4, (3 * w) / 4, (3 * h) / 4)
+
+        // 2. Upper center (cleavage, breasts, bikini tops, exposed chest)
+        val upperCenterRatio = ratioInBox(w / 5, (h * 18) / 100, (4 * w) / 5, (h * 55) / 100)
+
+        // 3. Lower center (pelvic, bikini bottom, thighs, buttocks)
+        val lowerCenterRatio = ratioInBox(w / 5, (h * 45) / 100, (4 * w) / 5, (h * 85) / 100)
+
+        // 4. 2x2 Quadrants + center quadrant
+        val halfW = w / 2
+        val halfH = h / 2
+        val q1 = ratioInBox(0, 0, halfW, halfH)
+        val q2 = ratioInBox(halfW, 0, w, halfH)
+        val q3 = ratioInBox(0, halfH, halfW, h)
+        val q4 = ratioInBox(halfW, halfH, w, h)
+        val maxQuadrant = maxOf(q1, q2, q3, q4, centerRatio)
+
+        return SkinZoneResult(
+            globalRatio = globalRatio,
+            centerRatio = centerRatio,
+            upperCenterRatio = upperCenterRatio,
+            lowerCenterRatio = lowerCenterRatio,
+            maxQuadrantRatio = maxQuadrant
+        )
+    }
+
+    private fun isSkinExcessive(z: SkinZoneResult, isTrash: Boolean): Boolean {
+        return if (isTrash) {
+            z.globalRatio >= TRASH_SKIN_THRESHOLD ||
+            z.centerRatio >= 0.16f ||
+            z.upperCenterRatio >= 0.16f ||
+            z.lowerCenterRatio >= 0.16f ||
+            z.maxQuadrantRatio >= 0.20f
+        } else {
+            z.globalRatio >= SKIN_THRESHOLD ||
+            z.centerRatio >= 0.21f ||
+            z.upperCenterRatio >= 0.21f ||
+            z.lowerCenterRatio >= 0.21f ||
+            z.maxQuadrantRatio >= 0.26f
+        }
     }
 
     /**

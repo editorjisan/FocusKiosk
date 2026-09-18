@@ -74,6 +74,7 @@ class SetupWizardActivity : AppCompatActivity() {
         binding.tvVersionInfo.text = "v${com.focuskiosk.BuildConfig.VERSION_NAME} (Build ${com.focuskiosk.BuildConfig.VERSION_CODE})"
 
         setupList()
+        setupSearchBar()
         setupDurationControls()
         binding.btnActivateLock.setOnClickListener { confirmActivation() }
 
@@ -145,6 +146,23 @@ class SetupWizardActivity : AppCompatActivity() {
         binding.rvSelectApps.adapter = selectAdapter
         binding.rvSelectApps.setHasFixedSize(false)
         binding.rvSelectApps.isNestedScrollingEnabled = true
+    }
+
+    private fun setupSearchBar() {
+        binding.etSearchApps.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                val q = s?.toString() ?: ""
+                selectAdapter.filter(q)
+                binding.btnClearSearch.visibility = if (q.isNotEmpty()) android.view.View.VISIBLE else android.view.View.GONE
+                binding.tvNoAppsFound.visibility = if (selectAdapter.itemCount == 0) android.view.View.VISIBLE else android.view.View.GONE
+            }
+            override fun afterTextChanged(s: android.text.Editable?) {}
+        })
+
+        binding.btnClearSearch.setOnClickListener {
+            binding.etSearchApps.text?.clear()
+        }
     }
 
     private fun loadApps() {
@@ -264,26 +282,38 @@ class SetupWizardActivity : AppCompatActivity() {
         }
 
         // Quick Presets
-        binding.chipPreset1m.setOnClickListener { setPreset(0, 0, 1) }
-        binding.chipPreset2m.setOnClickListener { setPreset(0, 0, 2) }
-        binding.chipPreset5m.setOnClickListener { setPreset(0, 0, 5) }
-        binding.chipPreset15m.setOnClickListener { setPreset(0, 0, 15) }
-        binding.chipPreset30m.setOnClickListener { setPreset(0, 0, 30) }
-        binding.chipPreset1h.setOnClickListener { setPreset(0, 1, 0) }
-        binding.chipPreset2h.setOnClickListener { setPreset(0, 2, 0) }
-        binding.chipPreset4h.setOnClickListener { setPreset(0, 4, 0) }
-        binding.chipPreset1d.setOnClickListener { setPreset(1, 0, 0) }
-        binding.chipPreset7d.setOnClickListener { setPreset(7, 0, 0) }
-        binding.chipPreset30d.setOnClickListener { setPreset(30, 0, 0) }
+        binding.chipPreset1m.setOnClickListener { setPreset(0, 0, 1, binding.chipPreset1m) }
+        binding.chipPreset2m.setOnClickListener { setPreset(0, 0, 2, binding.chipPreset2m) }
+        binding.chipPreset5m.setOnClickListener { setPreset(0, 0, 5, binding.chipPreset5m) }
+        binding.chipPreset15m.setOnClickListener { setPreset(0, 0, 15, binding.chipPreset15m) }
+        binding.chipPreset30m.setOnClickListener { setPreset(0, 0, 30, binding.chipPreset30m) }
+        binding.chipPreset1h.setOnClickListener { setPreset(0, 1, 0, binding.chipPreset1h) }
+        binding.chipPreset2h.setOnClickListener { setPreset(0, 2, 0, binding.chipPreset2h) }
+        binding.chipPreset4h.setOnClickListener { setPreset(0, 4, 0, binding.chipPreset4h) }
+        binding.chipPreset1d.setOnClickListener { setPreset(1, 0, 0, binding.chipPreset1d) }
+        binding.chipPreset7d.setOnClickListener { setPreset(7, 0, 0, binding.chipPreset7d) }
+        binding.chipPreset30d.setOnClickListener { setPreset(30, 0, 0, binding.chipPreset30d) }
 
-        updateDurationDisplay()
+        setPreset(0, 0, 1, binding.chipPreset1m)
     }
 
-    private fun setPreset(days: Int, hours: Int, minutes: Int) {
+    private fun setPreset(days: Int, hours: Int, minutes: Int, activeBtn: com.google.android.material.button.MaterialButton? = null) {
         selectedDays = days
         selectedHours = hours
         selectedMinutes = minutes
         updateDurationDisplay()
+
+        val allChips = listOf(
+            binding.chipPreset1m, binding.chipPreset2m, binding.chipPreset5m,
+            binding.chipPreset15m, binding.chipPreset30m, binding.chipPreset1h,
+            binding.chipPreset2h, binding.chipPreset4h, binding.chipPreset1d,
+            binding.chipPreset7d, binding.chipPreset30d
+        )
+        val selectedColor = android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#007AFF"))
+        val defaultColor = android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#2C2C2E"))
+        for (chip in allChips) {
+            chip.backgroundTintList = if (chip == activeBtn) selectedColor else defaultColor
+        }
     }
 
     private fun updateDurationDisplay() {
@@ -333,8 +363,29 @@ class SetupWizardActivity : AppCompatActivity() {
         }
 
         val unlockTs = System.currentTimeMillis() + durationMs
-        val previewText = binding.tvDurationPreview.text
+        val previewText = binding.tvDurationPreview.text.toString()
 
+        if (!com.focuskiosk.service.FocusAccessibilityService.isEnabled(this)) {
+            AlertDialog.Builder(this)
+                .setTitle("Enable Escape Guard")
+                .setMessage(
+                    "To prevent Facebook Reels and social web browsing from bypassing the lock inside Messenger, " +
+                    "please enable Focus Kiosk in Accessibility settings."
+                )
+                .setPositiveButton("Open Settings") { _, _ ->
+                    startActivity(Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                }
+                .setNegativeButton("Continue Anyway") { _, _ ->
+                    showFinalLockConfirm(whitelist, unlockTs, previewText)
+                }
+                .show()
+            return
+        }
+
+        showFinalLockConfirm(whitelist, unlockTs, previewText)
+    }
+
+    private fun showFinalLockConfirm(whitelist: Set<String>, unlockTs: Long, previewText: String) {
         AlertDialog.Builder(this)
             .setTitle("Confirm Focus Lock")
             .setMessage(

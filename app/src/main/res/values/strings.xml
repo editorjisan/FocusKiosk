@@ -3,4 +3,5 @@
     <string name="app_name">Focus Kiosk</string>
     <string name="device_admin_description">Manages digital detox lock policies, app visibility, and anti-tamper controls.</string>
     <string name="unlock_in">Unlocks in: %s</string>
+    <string name="accessibility_description">Enforces web and app boundaries by preventing unauthorized social media and adult browsing escapes.</string>
 </resources>

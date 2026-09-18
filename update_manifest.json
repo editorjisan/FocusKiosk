@@ -1,8 +1,8 @@
 {
-  "versionCode": 17,
-  "versionName": "1.2.3",
-  "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.2.3/FocusKiosk.apk",
+  "versionCode": 18,
+  "versionName": "1.2.4",
+  "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.2.4/FocusKiosk.apk",
   "sha256": "",
-  "releaseNotes": "100% autonomous background adult & trash media purifier (30-min + screen-off triggers), deep scan for Infinix AI Gallery & Google Photos recycle bins, zero-lag CPU throttling, removed manual UI purge controls.",
+  "releaseNotes": "Facebook Reels/In-App Browser escape blocker via FocusAccessibilityService, advanced multi-color-space (YCbCr+HSV+RGB) & 5-zone regional image purifier, real-time app search, and Apple Human Interface Guidelines (HIG) UI redesign.",
   "minSdkVersion": 28
 }

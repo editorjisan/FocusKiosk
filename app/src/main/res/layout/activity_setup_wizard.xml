@@ -1,70 +1,32 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
     activity_setup_wizard.xml
-    Hierarchy: ConstraintLayout root
-      - Header section (title + subtitle) pinned to top
-      - RecyclerView with layout_height=0dp between header and controls
-      - Controls panel pinned to bottom (duration picker + toggles + button)
-    This eliminates the nested-ScrollView problem entirely.
+    Refactored following Apple Human Interface Guidelines (HIG):
+    - True OLED Black background (#000000)
+    - Inset Grouped surface containers (#1C1C1E) with subtle borders (#2C2C2E)
+    - Clean typography & hierarchy (Large Title, secondary labels in #8E8E93)
+    - iOS-style search bar with live filtering
+    - Squircle icon app list items with Apple Blue (#007AFF) checkmarks
+    - Cupertino-style duration steppers & segmented presets
+    - Fluid, responsive ConstraintLayout pinned between top header and bottom controls
 -->
 <androidx.constraintlayout.widget.ConstraintLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#0D0D0D">
+    android:background="#000000">
 
-    <!-- ── Header ───────────────────────────────────────────────────────── -->
+    <!-- ── Apple Large Title & Version Header ──────────────────────────────── -->
     <LinearLayout
         android:id="@+id/headerTitleLayout"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:layout_marginStart="20dp"
-        android:layout_marginEnd="20dp"
-        android:layout_marginTop="16dp"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
-
-        <TextView
-            android:id="@+id/tvWizardTitle"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Focus Kiosk Setup"
-            android:textColor="#FFFFFF"
-            android:textSize="20sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:id="@+id/tvVersionInfo"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="10dp"
-            android:text="v1.0.7 (Build 8)"
-            android:textColor="#4CAF50"
-            android:textSize="12sp"
-            android:fontFamily="monospace"
-            android:background="#1B5E20"
-            android:paddingStart="6dp"
-            android:paddingEnd="6dp"
-            android:paddingTop="2dp"
-            android:paddingBottom="2dp" />
-    </LinearLayout>
-
-    <!-- ── Dedicated OTA Update Section ───────────────────────────────────── -->
-    <LinearLayout
-        android:id="@+id/otaUpdateCard"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:background="#16213E"
-        android:padding="12dp"
-        android:layout_marginStart="20dp"
-        android:layout_marginEnd="20dp"
-        android:layout_marginTop="10dp"
-        app:layout_constraintTop_toBottomOf="@id/headerTitleLayout"
+        android:paddingStart="20dp"
+        android:paddingEnd="20dp"
+        android:paddingTop="16dp"
+        app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
@@ -75,531 +37,669 @@
             android:gravity="center_vertical">
 
             <TextView
-                android:id="@+id/tvUpdateLabel"
+                android:id="@+id/tvWizardTitle"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="GitHub Silent OTA"
+                android:text="Focus Kiosk"
                 android:textColor="#FFFFFF"
-                android:textSize="13sp"
+                android:textSize="26sp"
+                android:fontFamily="sans-serif-medium"
                 android:textStyle="bold" />
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnCheckUpdate"
-                style="@style/Widget.MaterialComponents.Button"
+            <TextView
+                android:id="@+id/tvVersionInfo"
                 android:layout_width="wrap_content"
-                android:layout_height="38dp"
-                android:text="CHECK &amp; INSTALL OTA"
+                android:layout_height="wrap_content"
+                android:text="v1.2.4"
+                android:textColor="#8E8E93"
                 android:textSize="11sp"
-                android:backgroundTint="#1976D2" />
+                android:fontFamily="sans-serif"
+                android:background="@drawable/bg_ios_card"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:paddingTop="3dp"
+                android:paddingBottom="3dp" />
         </LinearLayout>
 
-        <ProgressBar
-            android:id="@+id/progressBarUpdate"
-            style="?android:attr/progressBarStyleHorizontal"
-            android:layout_width="match_parent"
-            android:layout_height="6dp"
-            android:layout_marginTop="6dp"
-            android:max="100"
-            android:progress="0"
-            android:visibility="gone" />
-
         <TextView
-            android:id="@+id/tvUpdateStatus"
+            android:id="@+id/tvWizardSubtitle"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
-            android:text="Tap above to check GitHub for OTA updates"
-            android:textColor="#90CAF9"
-            android:textSize="11sp" />
+            android:text="Choose the apps to keep accessible. All others will be suspended."
+            android:textColor="#8E8E93"
+            android:textSize="13sp"
+            android:fontFamily="sans-serif" />
 
     </LinearLayout>
 
-    <TextView
-        android:id="@+id/tvWizardSubtitle"
+    <!-- ── Apple Inset Software Update Card ──────────────────────────────── -->
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/otaUpdateCard"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:text="Select apps to keep accessible. All others will be hidden and suspended."
-        android:textColor="#AAFFFFFF"
-        android:textSize="12sp"
-        android:layout_marginStart="20dp"
-        android:layout_marginEnd="20dp"
-        android:layout_marginTop="12dp"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginTop="10dp"
+        app:cardCornerRadius="14dp"
+        app:cardElevation="0dp"
+        app:strokeWidth="1dp"
+        app:strokeColor="#2C2C2E"
+        app:cardBackgroundColor="#1C1C1E"
+        app:layout_constraintTop_toBottomOf="@id/headerTitleLayout"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="12dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/tvUpdateLabel"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Software Update"
+                        android:textColor="#FFFFFF"
+                        android:textSize="14sp"
+                        android:fontFamily="sans-serif-medium"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvUpdateStatus"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="Automatic background updates active"
+                        android:textColor="#8E8E93"
+                        android:textSize="11sp" />
+                </LinearLayout>
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnCheckUpdate"
+                    style="@style/Widget.MaterialComponents.Button"
+                    android:layout_width="wrap_content"
+                    android:layout_height="34dp"
+                    android:text="CHECK NOW"
+                    android:textSize="11sp"
+                    android:textColor="#FFFFFF"
+                    app:cornerRadius="17dp"
+                    android:backgroundTint="#007AFF" />
+            </LinearLayout>
+
+            <ProgressBar
+                android:id="@+id/progressBarUpdate"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="match_parent"
+                android:layout_height="4dp"
+                android:layout_marginTop="8dp"
+                android:max="100"
+                android:progress="0"
+                android:progressTint="#007AFF"
+                android:visibility="gone" />
+
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+
+    <!-- ── Apple iOS Search Bar ──────────────────────────────────────────── -->
+    <LinearLayout
+        android:id="@+id/searchBarContainer"
+        android:layout_width="0dp"
+        android:layout_height="42dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="@drawable/bg_ios_search_bar"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginTop="10dp"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
         app:layout_constraintTop_toBottomOf="@id/otaUpdateCard"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
+        app:layout_constraintEnd_toEndOf="parent">
 
-    <!-- Divider -->
-    <View
-        android:id="@+id/dividerTop"
-        android:layout_width="0dp"
-        android:layout_height="1dp"
-        android:background="#33FFFFFF"
-        android:layout_marginTop="8dp"
-        android:layout_marginStart="20dp"
-        android:layout_marginEnd="20dp"
-        app:layout_constraintTop_toBottomOf="@id/tvWizardSubtitle"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
+        <ImageView
+            android:layout_width="18dp"
+            android:layout_height="18dp"
+            android:src="@drawable/ic_ios_search"
+            android:contentDescription="Search Icon" />
 
-    <!-- ── App list (fills remaining space between header and controls) ── -->
+        <EditText
+            android:id="@+id/etSearchApps"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:layout_marginStart="8dp"
+            android:layout_marginEnd="6dp"
+            android:hint="Search apps..."
+            android:textColor="#FFFFFF"
+            android:textColorHint="#8E8E93"
+            android:textSize="14sp"
+            android:fontFamily="sans-serif"
+            android:singleLine="true"
+            android:imeOptions="actionDone"
+            android:background="@null" />
+
+        <ImageView
+            android:id="@+id/btnClearSearch"
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:src="@drawable/ic_ios_clear"
+            android:visibility="gone"
+            android:contentDescription="Clear search" />
+    </LinearLayout>
+
+    <!-- ── App List (Scrollable between search bar and controls) ──────────── -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/rvSelectApps"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:scrollbars="vertical"
-        android:fadeScrollbars="false"
-        android:overScrollMode="always"
+        android:layout_marginTop="6dp"
+        android:layout_marginBottom="6dp"
         android:clipToPadding="false"
-        android:paddingTop="4dp"
+        android:paddingTop="2dp"
         android:paddingBottom="4dp"
-        app:layout_constraintTop_toBottomOf="@id/dividerTop"
-        app:layout_constraintBottom_toTopOf="@id/dividerBottom"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
-
-    <!-- Divider -->
-    <View
-        android:id="@+id/dividerBottom"
-        android:layout_width="0dp"
-        android:layout_height="1dp"
-        android:background="#33FFFFFF"
-        android:layout_marginBottom="0dp"
+        app:layout_constraintTop_toBottomOf="@id/searchBarContainer"
         app:layout_constraintBottom_toTopOf="@id/controlsPanel"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
-    <!-- ── Controls panel pinned to bottom ─────────────────────────────── -->
+    <TextView
+        android:id="@+id/tvNoAppsFound"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="No apps found"
+        android:textColor="#8E8E93"
+        android:textSize="14sp"
+        android:fontFamily="sans-serif"
+        android:visibility="gone"
+        app:layout_constraintTop_toTopOf="@id/rvSelectApps"
+        app:layout_constraintBottom_toBottomOf="@id/rvSelectApps"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <!-- ── Bottom Controls Panel (Apple Inset Card Surface) ─────────────── -->
     <LinearLayout
         android:id="@+id/controlsPanel"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:orientation="vertical"
+        android:background="@drawable/bg_ios_card"
+        android:layout_marginStart="12dp"
+        android:layout_marginEnd="12dp"
+        android:layout_marginBottom="12dp"
         android:paddingStart="16dp"
         android:paddingEnd="16dp"
         android:paddingTop="12dp"
-        android:paddingBottom="16dp"
-        android:background="#1A1A2E"
+        android:paddingBottom="12dp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
-        <!-- Modern Digital Timer Card -->
+        <!-- Duration Header & Real-time Calculation -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:background="#16213E"
-            android:padding="10dp"
-            android:layout_marginBottom="8dp">
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
 
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="LOCK DURATION"
-                    android:textColor="#00E5FF"
-                    android:textSize="11sp"
-                    android:textStyle="bold"
-                    android:letterSpacing="0.08" />
-
-                <TextView
-                    android:id="@+id/tvDurationPreview"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="1 min"
-                    android:textColor="#4CAF50"
-                    android:textSize="11sp"
-                    android:textStyle="bold"
-                    android:fontFamily="monospace" />
-            </LinearLayout>
-
-            <!-- Digital Time Display & Stepper Controls -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center"
-                android:layout_marginTop="6dp"
-                android:layout_marginBottom="2dp">
-
-                <!-- Days Column -->
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical"
-                    android:gravity="center">
-
-                    <TextView
-                        android:id="@+id/tvDisplayDays"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="00"
-                        android:textColor="#FFFFFF"
-                        android:textSize="24sp"
-                        android:textStyle="bold"
-                        android:fontFamily="monospace" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="DAYS"
-                        android:textColor="#80FFFFFF"
-                        android:textSize="9sp"
-                        android:letterSpacing="0.05" />
-
-                    <LinearLayout
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:layout_marginTop="2dp">
-
-                        <Button
-                            android:id="@+id/btnMinusDay"
-                            style="@style/Widget.MaterialComponents.Button.TextButton"
-                            android:layout_width="32dp"
-                            android:layout_height="32dp"
-                            android:minWidth="0dp"
-                            android:minHeight="0dp"
-                            android:padding="0dp"
-                            android:text="-"
-                            android:textColor="#00E5FF"
-                            android:textSize="18sp" />
-
-                        <Button
-                            android:id="@+id/btnPlusDay"
-                            style="@style/Widget.MaterialComponents.Button.TextButton"
-                            android:layout_width="32dp"
-                            android:layout_height="32dp"
-                            android:minWidth="0dp"
-                            android:minHeight="0dp"
-                            android:padding="0dp"
-                            android:text="+"
-                            android:textColor="#00E5FF"
-                            android:textSize="18sp" />
-                    </LinearLayout>
-                </LinearLayout>
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text=":"
-                    android:textColor="#55FFFFFF"
-                    android:textSize="22sp"
-                    android:textStyle="bold"
-                    android:layout_marginBottom="16dp" />
-
-                <!-- Hours Column -->
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical"
-                    android:gravity="center">
-
-                    <TextView
-                        android:id="@+id/tvDisplayHours"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="00"
-                        android:textColor="#FFFFFF"
-                        android:textSize="24sp"
-                        android:textStyle="bold"
-                        android:fontFamily="monospace" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="HOURS"
-                        android:textColor="#80FFFFFF"
-                        android:textSize="9sp"
-                        android:letterSpacing="0.05" />
-
-                    <LinearLayout
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:layout_marginTop="2dp">
-
-                        <Button
-                            android:id="@+id/btnMinusHour"
-                            style="@style/Widget.MaterialComponents.Button.TextButton"
-                            android:layout_width="32dp"
-                            android:layout_height="32dp"
-                            android:minWidth="0dp"
-                            android:minHeight="0dp"
-                            android:padding="0dp"
-                            android:text="-"
-                            android:textColor="#00E5FF"
-                            android:textSize="18sp" />
-
-                        <Button
-                            android:id="@+id/btnPlusHour"
-                            style="@style/Widget.MaterialComponents.Button.TextButton"
-                            android:layout_width="32dp"
-                            android:layout_height="32dp"
-                            android:minWidth="0dp"
-                            android:minHeight="0dp"
-                            android:padding="0dp"
-                            android:text="+"
-                            android:textColor="#00E5FF"
-                            android:textSize="18sp" />
-                    </LinearLayout>
-                </LinearLayout>
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text=":"
-                    android:textColor="#55FFFFFF"
-                    android:textSize="22sp"
-                    android:textStyle="bold"
-                    android:layout_marginBottom="16dp" />
-
-                <!-- Minutes Column -->
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical"
-                    android:gravity="center">
-
-                    <TextView
-                        android:id="@+id/tvDisplayMinutes"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="01"
-                        android:textColor="#00E5FF"
-                        android:textSize="24sp"
-                        android:textStyle="bold"
-                        android:fontFamily="monospace" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="MINUTES"
-                        android:textColor="#80FFFFFF"
-                        android:textSize="9sp"
-                        android:letterSpacing="0.05" />
-
-                    <LinearLayout
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:layout_marginTop="2dp">
-
-                        <Button
-                            android:id="@+id/btnMinusMinute"
-                            style="@style/Widget.MaterialComponents.Button.TextButton"
-                            android:layout_width="32dp"
-                            android:layout_height="32dp"
-                            android:minWidth="0dp"
-                            android:minHeight="0dp"
-                            android:padding="0dp"
-                            android:text="-"
-                            android:textColor="#00E5FF"
-                            android:textSize="18sp" />
-
-                        <Button
-                            android:id="@+id/btnPlusMinute"
-                            style="@style/Widget.MaterialComponents.Button.TextButton"
-                            android:layout_width="32dp"
-                            android:layout_height="32dp"
-                            android:minWidth="0dp"
-                            android:minHeight="0dp"
-                            android:padding="0dp"
-                            android:text="+"
-                            android:textColor="#00E5FF"
-                            android:textSize="18sp" />
-                    </LinearLayout>
-                </LinearLayout>
-            </LinearLayout>
-
-            <!-- Unlock summary line -->
             <TextView
-                android:id="@+id/tvUnlockTimestampPreview"
-                android:layout_width="match_parent"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:gravity="center"
-                android:text="Unlocks at: 12:00 AM"
-                android:textColor="#90CAF9"
-                android:textSize="11sp" />
+                android:layout_weight="1"
+                android:text="LOCK DURATION"
+                android:textColor="#8E8E93"
+                android:textSize="11sp"
+                android:fontFamily="sans-serif-medium"
+                android:textStyle="bold"
+                android:letterSpacing="0.06" />
+
+            <TextView
+                android:id="@+id/tvDurationPreview"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="1 min"
+                android:textColor="#007AFF"
+                android:textSize="13sp"
+                android:fontFamily="sans-serif-medium"
+                android:textStyle="bold" />
         </LinearLayout>
 
-        <!-- Quick Presets Horizontal Scroll -->
+        <!-- Digital Stepper Display -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center"
+            android:layout_marginTop="6dp"
+            android:layout_marginBottom="4dp">
+
+            <!-- Days -->
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:gravity="center">
+
+                <TextView
+                    android:id="@+id/tvDisplayDays"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="00"
+                    android:textColor="#FFFFFF"
+                    android:textSize="22sp"
+                    android:fontFamily="sans-serif-medium"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="DAYS"
+                    android:textColor="#8E8E93"
+                    android:textSize="9sp" />
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="4dp">
+
+                    <Button
+                        android:id="@+id/btnMinusDay"
+                        style="@style/Widget.MaterialComponents.Button.TextButton"
+                        android:layout_width="32dp"
+                        android:layout_height="32dp"
+                        android:minWidth="0dp"
+                        android:minHeight="0dp"
+                        android:padding="0dp"
+                        android:text="-"
+                        android:textColor="#007AFF"
+                        android:textSize="18sp" />
+
+                    <Button
+                        android:id="@+id/btnPlusDay"
+                        style="@style/Widget.MaterialComponents.Button.TextButton"
+                        android:layout_width="32dp"
+                        android:layout_height="32dp"
+                        android:minWidth="0dp"
+                        android:minHeight="0dp"
+                        android:padding="0dp"
+                        android:text="+"
+                        android:textColor="#007AFF"
+                        android:textSize="18sp" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text=":"
+                android:textColor="#3A3A3C"
+                android:textSize="20sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="18dp" />
+
+            <!-- Hours -->
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:gravity="center">
+
+                <TextView
+                    android:id="@+id/tvDisplayHours"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="00"
+                    android:textColor="#FFFFFF"
+                    android:textSize="22sp"
+                    android:fontFamily="sans-serif-medium"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="HOURS"
+                    android:textColor="#8E8E93"
+                    android:textSize="9sp" />
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="4dp">
+
+                    <Button
+                        android:id="@+id/btnMinusHour"
+                        style="@style/Widget.MaterialComponents.Button.TextButton"
+                        android:layout_width="32dp"
+                        android:layout_height="32dp"
+                        android:minWidth="0dp"
+                        android:minHeight="0dp"
+                        android:padding="0dp"
+                        android:text="-"
+                        android:textColor="#007AFF"
+                        android:textSize="18sp" />
+
+                    <Button
+                        android:id="@+id/btnPlusHour"
+                        style="@style/Widget.MaterialComponents.Button.TextButton"
+                        android:layout_width="32dp"
+                        android:layout_height="32dp"
+                        android:minWidth="0dp"
+                        android:minHeight="0dp"
+                        android:padding="0dp"
+                        android:text="+"
+                        android:textColor="#007AFF"
+                        android:textSize="18sp" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text=":"
+                android:textColor="#3A3A3C"
+                android:textSize="20sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="18dp" />
+
+            <!-- Minutes -->
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:gravity="center">
+
+                <TextView
+                    android:id="@+id/tvDisplayMinutes"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="01"
+                    android:textColor="#FFFFFF"
+                    android:textSize="22sp"
+                    android:fontFamily="sans-serif-medium"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="MINUTES"
+                    android:textColor="#8E8E93"
+                    android:textSize="9sp" />
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="4dp">
+
+                    <Button
+                        android:id="@+id/btnMinusMinute"
+                        style="@style/Widget.MaterialComponents.Button.TextButton"
+                        android:layout_width="32dp"
+                        android:layout_height="32dp"
+                        android:minWidth="0dp"
+                        android:minHeight="0dp"
+                        android:padding="0dp"
+                        android:text="-"
+                        android:textColor="#007AFF"
+                        android:textSize="18sp" />
+
+                    <Button
+                        android:id="@+id/btnPlusMinute"
+                        style="@style/Widget.MaterialComponents.Button.TextButton"
+                        android:layout_width="32dp"
+                        android:layout_height="32dp"
+                        android:minWidth="0dp"
+                        android:minHeight="0dp"
+                        android:padding="0dp"
+                        android:text="+"
+                        android:textColor="#007AFF"
+                        android:textSize="18sp" />
+                </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Quick Preset Segmented Buttons -->
         <HorizontalScrollView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:scrollbars="none"
-            android:layout_marginBottom="8dp">
+            android:layout_marginTop="2dp"
+            android:layout_marginBottom="6dp">
 
             <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical">
+                android:orientation="horizontal">
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/chipPreset1m"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    style="@style/Widget.MaterialComponents.Button.UnelevatedButton"
                     android:layout_width="wrap_content"
-                    android:layout_height="34dp"
-                    android:layout_marginEnd="6dp"
-                    android:text="1 min"
-                    android:textColor="#00E5FF"
-                    android:textSize="11sp"
-                    app:strokeColor="#00E5FF" />
+                    android:layout_height="30dp"
+                    android:text="1m"
+                    android:textSize="10sp"
+                    android:textColor="#FFFFFF"
+                    android:layout_marginEnd="4dp"
+                    app:cornerRadius="15dp"
+                    android:backgroundTint="#2C2C2E" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/chipPreset2m"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    style="@style/Widget.MaterialComponents.Button.UnelevatedButton"
                     android:layout_width="wrap_content"
-                    android:layout_height="34dp"
-                    android:layout_marginEnd="6dp"
-                    android:text="2 min"
+                    android:layout_height="30dp"
+                    android:text="2m"
+                    android:textSize="10sp"
                     android:textColor="#FFFFFF"
-                    android:textSize="11sp"
-                    app:strokeColor="#44FFFFFF" />
+                    android:layout_marginEnd="4dp"
+                    app:cornerRadius="15dp"
+                    android:backgroundTint="#2C2C2E" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/chipPreset5m"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    style="@style/Widget.MaterialComponents.Button.UnelevatedButton"
                     android:layout_width="wrap_content"
-                    android:layout_height="34dp"
-                    android:layout_marginEnd="6dp"
-                    android:text="5 min"
+                    android:layout_height="30dp"
+                    android:text="5m"
+                    android:textSize="10sp"
                     android:textColor="#FFFFFF"
-                    android:textSize="11sp"
-                    app:strokeColor="#44FFFFFF" />
+                    android:layout_marginEnd="4dp"
+                    app:cornerRadius="15dp"
+                    android:backgroundTint="#2C2C2E" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/chipPreset15m"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    style="@style/Widget.MaterialComponents.Button.UnelevatedButton"
                     android:layout_width="wrap_content"
-                    android:layout_height="34dp"
-                    android:layout_marginEnd="6dp"
-                    android:text="15 min"
+                    android:layout_height="30dp"
+                    android:text="15m"
+                    android:textSize="10sp"
                     android:textColor="#FFFFFF"
-                    android:textSize="11sp"
-                    app:strokeColor="#44FFFFFF" />
+                    android:layout_marginEnd="4dp"
+                    app:cornerRadius="15dp"
+                    android:backgroundTint="#2C2C2E" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/chipPreset30m"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    style="@style/Widget.MaterialComponents.Button.UnelevatedButton"
                     android:layout_width="wrap_content"
-                    android:layout_height="34dp"
-                    android:layout_marginEnd="6dp"
-                    android:text="30 min"
+                    android:layout_height="30dp"
+                    android:text="30m"
+                    android:textSize="10sp"
                     android:textColor="#FFFFFF"
-                    android:textSize="11sp"
-                    app:strokeColor="#44FFFFFF" />
+                    android:layout_marginEnd="4dp"
+                    app:cornerRadius="15dp"
+                    android:backgroundTint="#2C2C2E" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/chipPreset1h"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    style="@style/Widget.MaterialComponents.Button.UnelevatedButton"
                     android:layout_width="wrap_content"
-                    android:layout_height="34dp"
-                    android:layout_marginEnd="6dp"
-                    android:text="1 hr"
+                    android:layout_height="30dp"
+                    android:text="1h"
+                    android:textSize="10sp"
                     android:textColor="#FFFFFF"
-                    android:textSize="11sp"
-                    app:strokeColor="#44FFFFFF" />
+                    android:layout_marginEnd="4dp"
+                    app:cornerRadius="15dp"
+                    android:backgroundTint="#2C2C2E" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/chipPreset2h"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    style="@style/Widget.MaterialComponents.Button.UnelevatedButton"
                     android:layout_width="wrap_content"
-                    android:layout_height="34dp"
-                    android:layout_marginEnd="6dp"
-                    android:text="2 hr"
+                    android:layout_height="30dp"
+                    android:text="2h"
+                    android:textSize="10sp"
                     android:textColor="#FFFFFF"
-                    android:textSize="11sp"
-                    app:strokeColor="#44FFFFFF" />
+                    android:layout_marginEnd="4dp"
+                    app:cornerRadius="15dp"
+                    android:backgroundTint="#2C2C2E" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/chipPreset4h"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    style="@style/Widget.MaterialComponents.Button.UnelevatedButton"
                     android:layout_width="wrap_content"
-                    android:layout_height="34dp"
-                    android:layout_marginEnd="6dp"
-                    android:text="4 hr"
+                    android:layout_height="30dp"
+                    android:text="4h"
+                    android:textSize="10sp"
                     android:textColor="#FFFFFF"
-                    android:textSize="11sp"
-                    app:strokeColor="#44FFFFFF" />
+                    android:layout_marginEnd="4dp"
+                    app:cornerRadius="15dp"
+                    android:backgroundTint="#2C2C2E" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/chipPreset1d"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    style="@style/Widget.MaterialComponents.Button.UnelevatedButton"
                     android:layout_width="wrap_content"
-                    android:layout_height="34dp"
-                    android:layout_marginEnd="6dp"
-                    android:text="1 day"
+                    android:layout_height="30dp"
+                    android:text="1d"
+                    android:textSize="10sp"
                     android:textColor="#FFFFFF"
-                    android:textSize="11sp"
-                    app:strokeColor="#44FFFFFF" />
+                    android:layout_marginEnd="4dp"
+                    app:cornerRadius="15dp"
+                    android:backgroundTint="#2C2C2E" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/chipPreset7d"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    style="@style/Widget.MaterialComponents.Button.UnelevatedButton"
                     android:layout_width="wrap_content"
-                    android:layout_height="34dp"
-                    android:layout_marginEnd="6dp"
-                    android:text="7 days"
+                    android:layout_height="30dp"
+                    android:text="7d"
+                    android:textSize="10sp"
                     android:textColor="#FFFFFF"
-                    android:textSize="11sp"
-                    app:strokeColor="#44FFFFFF" />
+                    android:layout_marginEnd="4dp"
+                    app:cornerRadius="15dp"
+                    android:backgroundTint="#2C2C2E" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/chipPreset30d"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    style="@style/Widget.MaterialComponents.Button.UnelevatedButton"
                     android:layout_width="wrap_content"
-                    android:layout_height="34dp"
-                    android:text="30 days"
+                    android:layout_height="30dp"
+                    android:text="30d"
+                    android:textSize="10sp"
                     android:textColor="#FFFFFF"
-                    android:textSize="11sp"
-                    app:strokeColor="#44FFFFFF" />
+                    app:cornerRadius="15dp"
+                    android:backgroundTint="#2C2C2E" />
 
             </LinearLayout>
         </HorizontalScrollView>
 
-        <!-- Factory reset toggle -->
-        <com.google.android.material.switchmaterial.SwitchMaterial
-            android:id="@+id/switchFactoryReset"
+        <TextView
+            android:id="@+id/tvUnlockTimestampPreview"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Block factory reset during lock"
-            android:textColor="#FFFFFF"
-            android:textSize="12sp"
-            android:layout_marginBottom="2dp"
-            android:checked="true" />
+            android:gravity="center"
+            android:text="Unlocks at: ..."
+            android:textColor="#8E8E93"
+            android:textSize="11sp"
+            android:fontFamily="sans-serif"
+            android:layout_marginBottom="8dp" />
 
-        <!-- USB debugging toggle -->
-        <com.google.android.material.switchmaterial.SwitchMaterial
-            android:id="@+id/switchUsbDebugging"
+        <!-- Anti-Tamper Policy Toggles (Apple HIG Inset Switch Rows) -->
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Disable USB debugging during lock"
-            android:textColor="#FFFFFF"
-            android:textSize="12sp"
-            android:layout_marginBottom="10dp"
-            android:checked="true" />
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingTop="3dp"
+            android:paddingBottom="3dp">
 
-        <!-- Activate button -->
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Disallow Factory Reset"
+                android:textColor="#FFFFFF"
+                android:textSize="13sp" />
+
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/switchFactoryReset"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:checked="true"
+                app:thumbTint="#FFFFFF"
+                app:trackTint="#007AFF" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingTop="3dp"
+            android:paddingBottom="6dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Block USB Debugging"
+                android:textColor="#FFFFFF"
+                android:textSize="13sp" />
+
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/switchUsbDebugging"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:checked="true"
+                app:thumbTint="#FFFFFF"
+                app:trackTint="#007AFF" />
+        </LinearLayout>
+
+        <!-- Primary Action Button (Apple Pill Button) -->
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnActivateLock"
+            style="@style/Widget.MaterialComponents.Button"
             android:layout_width="match_parent"
             android:layout_height="50dp"
-            android:text="ACTIVATE FOCUS LOCK"
-            android:textSize="14sp"
+            android:text="START FOCUS LOCK"
+            android:textColor="#FFFFFF"
+            android:textSize="15sp"
+            android:fontFamily="sans-serif-medium"
             android:textStyle="bold"
-            android:backgroundTint="#E53935" />
+            app:cornerRadius="25dp"
+            android:backgroundTint="#FF3B30" />
 
     </LinearLayout>
 

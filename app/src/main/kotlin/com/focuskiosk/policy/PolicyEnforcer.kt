@@ -391,7 +391,11 @@ object PolicyEnforcer {
         "org.mozilla.firefox",
         "com.opera.browser",
         "com.opera.mini.native",
-        "com.brave.browser"
+        "com.brave.browser",
+        "com.facebook.orca",
+        "com.facebook.katana",
+        "com.facebook.lite",
+        "com.facebook.mlite"
     )
 
     private val BLOCKED_URL_PATTERNS = arrayOf(
@@ -400,6 +404,10 @@ object PolicyEnforcer {
         "*://*.fb.watch/*",
         "*://*.fb.me/*",
         "*://*.m.facebook.com/*",
+        "*://*.touch.facebook.com/*",
+        "*://*.web.facebook.com/*",
+        "*://*.l.facebook.com/*",
+        "*://*.lm.facebook.com/*",
         "*://*.instagram.com/*",
         "*://*.tiktok.com/*",
         "*://*.twitter.com/*",
@@ -421,7 +429,9 @@ object PolicyEnforcer {
     )
 
     private val BLOCKED_HOSTS = listOf(
-        "facebook.com", "m.facebook.com", "www.facebook.com", "fb.com", "fb.watch", "fb.me",
+        "facebook.com", "m.facebook.com", "www.facebook.com", "touch.facebook.com",
+        "web.facebook.com", "l.facebook.com", "lm.facebook.com", "mbasic.facebook.com",
+        "fb.com", "fb.watch", "fb.me",
         "instagram.com", "www.instagram.com", "tiktok.com", "www.tiktok.com",
         "pornhub.com", "www.pornhub.com", "xvideos.com", "www.xvideos.com",
         "xnxx.com", "www.xnxx.com", "xhamster.com", "www.xhamster.com",
@@ -469,6 +479,11 @@ object PolicyEnforcer {
             }
             Log.i(TAG, "Configured persistent preferred activity for ${BLOCKED_HOSTS.size} deep link hosts.")
         }.onFailure { Log.w(TAG, "Failed adding persistent preferred activity: ${it.message}") }
+
+        // 4. Permit Accessibility Services without restriction
+        runCatching {
+            dpm(context).setPermittedAccessibilityServices(admin(context), null)
+        }
     }
 
     fun clearWebFiltering(context: Context) {

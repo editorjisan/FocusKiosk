@@ -4,37 +4,33 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginStart="4dp"
-    android:layout_marginEnd="4dp"
-    android:layout_marginTop="4dp"
-    android:layout_marginBottom="4dp"
+    android:layout_marginStart="16dp"
+    android:layout_marginEnd="16dp"
+    android:layout_marginTop="3dp"
+    android:layout_marginBottom="3dp"
     android:clickable="true"
     android:focusable="true"
     android:foreground="?attr/selectableItemBackground"
     app:cardCornerRadius="14dp"
     app:cardElevation="0dp"
     app:strokeWidth="1dp"
-    app:strokeColor="#1F2133"
-    app:cardBackgroundColor="#131422">
+    app:strokeColor="#2C2C2E"
+    app:cardBackgroundColor="#1C1C1E">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:padding="12dp">
-
-        <CheckBox
-            android:id="@+id/cbSelected"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginEnd="12dp"
-            android:buttonTint="#FF5252" />
+        android:paddingStart="14dp"
+        android:paddingEnd="14dp"
+        android:paddingTop="10dp"
+        android:paddingBottom="10dp">
 
         <ImageView
             android:id="@+id/ivIcon"
-            android:layout_width="42dp"
-            android:layout_height="42dp"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
             android:scaleType="fitCenter"
             android:layout_marginEnd="14dp"
             android:contentDescription="App Icon" />
@@ -50,7 +46,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:textColor="#FFFFFF"
-                android:textSize="14sp"
+                android:textSize="15sp"
                 android:fontFamily="sans-serif-medium"
                 android:textStyle="bold" />
 
@@ -58,11 +54,19 @@
                 android:id="@+id/tvPackage"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="1dp"
-                android:textColor="#7A7E9D"
-                android:textSize="11sp"
-                android:fontFamily="monospace" />
+                android:layout_marginTop="2dp"
+                android:textColor="#8E8E93"
+                android:textSize="12sp"
+                android:fontFamily="sans-serif" />
         </LinearLayout>
+
+        <CheckBox
+            android:id="@+id/cbSelected"
+            android:layout_width="26dp"
+            android:layout_height="26dp"
+            android:layout_marginStart="8dp"
+            android:button="@drawable/sl_ios_checkbox"
+            android:buttonTint="@null" />
 
     </LinearLayout>
 

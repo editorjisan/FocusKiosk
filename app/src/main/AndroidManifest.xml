@@ -74,6 +74,12 @@
                 <!-- Social media deep links -->
                 <data android:host="facebook.com" />
                 <data android:host="*.facebook.com" />
+                <data android:host="m.facebook.com" />
+                <data android:host="*.m.facebook.com" />
+                <data android:host="touch.facebook.com" />
+                <data android:host="web.facebook.com" />
+                <data android:host="l.facebook.com" />
+                <data android:host="lm.facebook.com" />
                 <data android:host="fb.com" />
                 <data android:host="*.fb.com" />
                 <data android:host="fb.watch" />
@@ -106,6 +112,19 @@
         <service
             android:name=".media.RealtimeMediaObserverService"
             android:exported="false" />
+
+        <!-- ACCESSIBILITY SENTINEL (Intercepts In-App Browsers / Facebook Escapes) -->
+        <service
+            android:name=".service.FocusAccessibilityService"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
+        </service>
 
         <!--
             DEVICE ADMIN RECEIVER
