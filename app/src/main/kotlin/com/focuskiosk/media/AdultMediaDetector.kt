@@ -29,8 +29,8 @@ object AdultMediaDetector {
 
     private const val TAG = "AdultMediaDetector"
     private const val THUMB_SIZE = 96
-    private const val SKIN_THRESHOLD = 0.17f
-    private const val TRASH_SKIN_THRESHOLD = 0.12f
+    private const val SKIN_THRESHOLD = 0.12f
+    private const val TRASH_SKIN_THRESHOLD = 0.08f
 
     private val ADULT_KEYWORDS = setOf(
         // English standard & explicit
@@ -194,6 +194,7 @@ object AdultMediaDetector {
         val centerRatio: Float,
         val upperCenterRatio: Float,
         val lowerCenterRatio: Float,
+        val torsoRatio: Float,
         val maxQuadrantRatio: Float
     )
 
@@ -202,31 +203,39 @@ object AdultMediaDetector {
         val g = (color shr 8) and 0xFF
         val b = color and 0xFF
 
-        // 1. RGB human skin heuristics (Peer et al. + daylight/flash models)
-        val isRgbSkin = (r > 80 && g > 35 && b > 20 &&
-                        r > g && r > b && (r - g) > 10 &&
-                        (Math.max(r, Math.max(g, b)) - Math.min(r, Math.min(g, b))) > 12) ||
-                       (r > 205 && g > 190 && b > 145 && Math.abs(r - g) <= 25 && r > b && g > b)
+        // 1. Standard RGB human skin heuristics (Peer et al.)
+        val isRgbStandard = (r > 70 && g > 30 && b > 15 &&
+                            r > g && r > b && (r - g) > 6 &&
+                            (maxOf(r, g, b) - minOf(r, g, b)) > 10)
 
-        // 2. YCbCr color model (Kovac / Vezhnevets et al.)
+        // 2. High-key / pale / fair / Asian / beauty-filtered / studio glamour skin:
+        // Filtered skin typically has high R, G, B with slight warmth (R >= G and R >= B)
+        val isRgbFair = (r > 160 && g > 125 && b > 95 &&
+                         r >= g && (r - b) >= 4 && Math.abs(r - g) <= 55)
+
+        // 3. YCbCr color model (extended bounds for fair/pale/Asian and beauty-filtered skin)
         // Y = 0.299R + 0.587G + 0.114B
         // Cr = (R - Y) * 0.713 + 128
         // Cb = (B - Y) * 0.564 + 128
         val y = 0.299f * r + 0.587f * g + 0.114f * b
         val cr = (r - y) * 0.713f + 128f
         val cb = (b - y) * 0.564f + 128f
-        val isYcbcrSkin = cr in 133.0f..175.0f && cb in 75.0f..130.0f
+        val isYcbcrSkin = cr in 118.0f..180.0f && cb in 70.0f..138.0f
 
-        // 3. HSV model with wrap-around hue (330° - 360° and 0° - 50°)
+        // 4. HSV model with wrap-around hue (325° - 360° and 0° - 55°)
+        // Saturation threshold lowered to 0.03f to capture beauty filters and bright indoor light
         Color.colorToHSV(color, hsv)
         val h = hsv[0]
         val s = hsv[1]
         val v = hsv[2]
-        val isHsvSkin = (h in 0.0f..50.0f || h in 330.0f..360.0f) &&
-                        (s in 0.07f..0.88f) &&
-                        (v in 0.20f..1.0f)
+        val isHsvSkin = (h in 0.0f..55.0f || h in 325.0f..360.0f) &&
+                        (s in 0.03f..0.92f) &&
+                        (v in 0.15f..1.0f)
 
-        return (isYcbcrSkin && isHsvSkin) || (isRgbSkin && isYcbcrSkin) || (isRgbSkin && isHsvSkin && cr > 130f)
+        return (isYcbcrSkin && isHsvSkin) ||
+               (isRgbStandard && isYcbcrSkin) ||
+               (isRgbFair && isHsvSkin) ||
+               (isRgbStandard && isHsvSkin && cr > 120f)
     }
 
     private fun analyzeSkinZones(bitmap: Bitmap): SkinZoneResult {
@@ -265,12 +274,15 @@ object AdultMediaDetector {
         val centerRatio = ratioInBox(w / 4, h / 4, (3 * w) / 4, (3 * h) / 4)
 
         // 2. Upper center (cleavage, breasts, bikini tops, exposed chest)
-        val upperCenterRatio = ratioInBox(w / 5, (h * 18) / 100, (4 * w) / 5, (h * 55) / 100)
+        val upperCenterRatio = ratioInBox(w / 6, (h * 15) / 100, (5 * w) / 6, (h * 55) / 100)
 
         // 3. Lower center (pelvic, bikini bottom, thighs, buttocks)
-        val lowerCenterRatio = ratioInBox(w / 5, (h * 45) / 100, (4 * w) / 5, (h * 85) / 100)
+        val lowerCenterRatio = ratioInBox(w / 6, (h * 45) / 100, (5 * w) / 6, (h * 85) / 100)
 
-        // 4. 2x2 Quadrants + center quadrant
+        // 4. Torso vertical strip (central 50% width, 20% to 80% height)
+        val torsoRatio = ratioInBox(w / 4, (h * 20) / 100, (3 * w) / 4, (h * 80) / 100)
+
+        // 5. 2x2 Quadrants + center quadrant
         val halfW = w / 2
         val halfH = h / 2
         val q1 = ratioInBox(0, 0, halfW, halfH)
@@ -284,6 +296,7 @@ object AdultMediaDetector {
             centerRatio = centerRatio,
             upperCenterRatio = upperCenterRatio,
             lowerCenterRatio = lowerCenterRatio,
+            torsoRatio = torsoRatio,
             maxQuadrantRatio = maxQuadrant
         )
     }
@@ -291,16 +304,18 @@ object AdultMediaDetector {
     private fun isSkinExcessive(z: SkinZoneResult, isTrash: Boolean): Boolean {
         return if (isTrash) {
             z.globalRatio >= TRASH_SKIN_THRESHOLD ||
-            z.centerRatio >= 0.16f ||
-            z.upperCenterRatio >= 0.16f ||
-            z.lowerCenterRatio >= 0.16f ||
-            z.maxQuadrantRatio >= 0.20f
+            z.centerRatio >= 0.10f ||
+            z.upperCenterRatio >= 0.10f ||
+            z.lowerCenterRatio >= 0.10f ||
+            z.torsoRatio >= 0.10f ||
+            z.maxQuadrantRatio >= 0.12f
         } else {
-            z.globalRatio >= SKIN_THRESHOLD ||
-            z.centerRatio >= 0.21f ||
-            z.upperCenterRatio >= 0.21f ||
-            z.lowerCenterRatio >= 0.21f ||
-            z.maxQuadrantRatio >= 0.26f
+            z.globalRatio >= SKIN_THRESHOLD ||      // >= 0.12f
+            z.centerRatio >= 0.14f ||
+            z.upperCenterRatio >= 0.12f ||          // Sensitive to cleavage/bikini top/selfies
+            z.lowerCenterRatio >= 0.12f ||          // Sensitive to buttocks/thongs/pelvic/thighs
+            z.torsoRatio >= 0.14f ||                // Sensitive to swimsuits/lingerie/monokinis
+            z.maxQuadrantRatio >= 0.16f             // Sensitive to close-up shots
         }
     }
 
@@ -331,20 +346,29 @@ object AdultMediaDetector {
             }
         }.onFailure { Log.w(TAG, "Direct file deletion failed: ${it.message}") }
 
-        // 3. MediaStore deletion via ContentResolver (including Trashed media)
+        // 3. MediaStore deletion via ContentResolver by exact path and ID
         runCatching {
             val cr = context.contentResolver
             if (contentUri != null) {
                 cr.delete(contentUri, null, null)
+                purged = true
             }
             val where = "${MediaStore.MediaColumns.DATA}=?"
             val args = arrayOf(file.absolutePath)
+
+            val filesUri = MediaStore.Files.getContentUri("external")
+            cr.query(filesUri, arrayOf(MediaStore.MediaColumns._ID), where, args, null)?.use { cursor ->
+                val idIdx = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
+                while (cursor.moveToNext()) {
+                    val id = cursor.getLong(idIdx)
+                    val itemUri = android.content.ContentUris.withAppendedId(filesUri, id)
+                    cr.delete(itemUri, null, null)
+                    purged = true
+                }
+            }
             cr.delete(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, where, args)
             cr.delete(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, where, args)
             cr.delete(MediaStore.Downloads.EXTERNAL_CONTENT_URI, where, args)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                cr.delete(MediaStore.Files.getContentUri("external"), where, args)
-            }
             purged = true
         }.onFailure { Log.w(TAG, "MediaStore resolver deletion failed: ${it.message}") }
 

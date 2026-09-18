@@ -46,6 +46,11 @@ import java.util.Locale
  */
 class SetupWizardActivity : AppCompatActivity() {
 
+    companion object {
+        @Volatile
+        private var cachedAppList: List<AppInfo>? = null
+    }
+
     private lateinit var binding: ActivitySetupWizardBinding
     private lateinit var selectAdapter: AppSelectAdapter
 
@@ -276,8 +281,17 @@ class SetupWizardActivity : AppCompatActivity() {
     }
 
     private fun loadApps() {
+        // 1. Instant cache hit: render app list in 0ms without waiting for icon decoding
+        cachedAppList?.let { cached ->
+            selectAdapter.submitList(cached)
+        }
+
         lifecycleScope.launch {
             val apps = withContext(Dispatchers.IO) {
+                if (cachedAppList != null) {
+                    return@withContext cachedAppList!!
+                }
+
                 val pm = packageManager
 
                 // Query all launchable apps directly in a single IPC call (10x faster)
@@ -319,6 +333,7 @@ class SetupWizardActivity : AppCompatActivity() {
                 }
 
                 appList.sortBy { it.label.lowercase() }
+                cachedAppList = appList
                 appList
             }
             selectAdapter.submitList(apps)

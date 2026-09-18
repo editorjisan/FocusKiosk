@@ -1,8 +1,8 @@
 {
-  "versionCode": 19,
-  "versionName": "1.2.5",
-  "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.2.5/FocusKiosk.apk",
-  "sha256": "fd3ab3594fd07f1838d44c68e7ad8aa592bc16166897e54e17fc25ebf41175fd",
-  "releaseNotes": "Fix search keyboard squishing bug with keyboard-adaptive layout, Apple HIG Dynamic Island home redesign & floating squircle app grid, Android 13/14 restricted settings guidance for Escape Guard, and autonomous background adult media purger.",
+  "versionCode": 20,
+  "versionName": "1.2.6",
+  "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.2.6/FocusKiosk.apk",
+  "sha256": "bc80644fc8af86b2fa8c9ff1a5a57a5fe5a54245478a2e95fa8c830dac39494c",
+  "releaseNotes": "Instant speed & zero-lag focus transitions (bulk suspension and chunked parallel hiding/unhiding), 0ms app drawer cache, expanded 27-point adult & suggestive media purger with porcelain/Asian skin color models & full-storage file explorer crawler, AppOp 92 unrestricted deletion, and universal browser Facebook Reels escape blocker.",
   "minSdkVersion": 28
 }

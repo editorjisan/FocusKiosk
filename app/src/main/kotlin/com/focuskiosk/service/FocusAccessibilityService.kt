@@ -43,6 +43,25 @@ class FocusAccessibilityService : AccessibilityService() {
             "onlyfans.com"
         )
 
+        private val BROWSER_PACKAGES = setOf(
+            "com.android.chrome",
+            "com.chrome.beta",
+            "com.chrome.dev",
+            "com.chrome.canary",
+            "com.google.android.apps.chrome",
+            "com.transsion.phoenix",
+            "com.sec.android.app.sbrowser",
+            "org.mozilla.firefox",
+            "com.opera.browser",
+            "com.opera.mini.native",
+            "com.microsoft.emmx",
+            "com.brave.browser",
+            "com.mi.globalbrowser",
+            "com.coloros.browser",
+            "com.heytap.browser",
+            "com.vivo.browser"
+        )
+
         fun isEnabled(context: Context): Boolean {
             val expectedServiceName = "${context.packageName}/${FocusAccessibilityService::class.java.name}"
             val enabledServices = android.provider.Settings.Secure.getString(
@@ -61,24 +80,20 @@ class FocusAccessibilityService : AccessibilityService() {
         val pkg = event.packageName?.toString() ?: return
         val className = event.className?.toString() ?: ""
 
-        // Target Messenger & Facebook app containers
-        if (pkg == "com.facebook.orca" || pkg == "com.facebook.katana" ||
-            pkg == "com.facebook.lite" || pkg == "com.facebook.mlite" ||
-            pkg == "com.instagram.android") {
+        val isSocialApp = pkg == "com.facebook.orca" || pkg == "com.facebook.katana" ||
+                          pkg == "com.facebook.lite" || pkg == "com.facebook.mlite" ||
+                          pkg == "com.instagram.android"
+        val isBrowserApp = pkg in BROWSER_PACKAGES
 
-            // If the in-app browser activity is opened
+        if (isSocialApp || isBrowserApp) {
             val isBrowserActivity = className.contains("BrowserLiteActivity", ignoreCase = true) ||
                                     className.contains("BrowserLite", ignoreCase = true) ||
                                     className.contains("InAppBrowser", ignoreCase = true) ||
-                                    className.contains("ChromeTab", ignoreCase = true)
+                                    className.contains("ChromeTab", ignoreCase = true) ||
+                                    className.contains("CustomTab", ignoreCase = true) ||
+                                    isBrowserApp
 
-            if (isBrowserActivity) {
-                checkAndDismissIfProhibited(pkg, className)
-                return
-            }
-
-            // Also check window content if window state changed
-            if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            if (isBrowserActivity || event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
                 checkAndDismissIfProhibited(pkg, className)
             }
         }

@@ -90,7 +90,7 @@ class RealtimeMediaObserverService : Service() {
         }
 
         /**
-         * Deep scan of all media storage directories & MediaStore records.
+         * Deep scan of all media storage directories & MediaStore records across the entire phone.
          * Throttled with delay() to ensure zero UI lag or phone hang.
          * Returns (scannedCount, purgedCount).
          */
@@ -106,7 +106,7 @@ class RealtimeMediaObserverService : Service() {
             for (dir in directories) {
                 if (dir.exists() && dir.isDirectory) {
                     try {
-                        dir.walkTopDown().maxDepth(5).forEach { file ->
+                        dir.walkTopDown().maxDepth(6).forEach { file ->
                             if (file.isFile && AdultMediaDetector.isMediaFile(file)) {
                                 scannedCount++
                                 if (scannedCount % 8 == 0) {
@@ -178,10 +178,11 @@ class RealtimeMediaObserverService : Service() {
 
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == Intent.ACTION_SCREEN_OFF) {
-                Log.d(TAG, "Screen off: launching idle background media sweep...")
+            val action = intent?.action ?: return
+            if (action == Intent.ACTION_SCREEN_OFF || action == Intent.ACTION_USER_PRESENT || action == Intent.ACTION_SCREEN_ON) {
+                Log.d(TAG, "Screen/User event ($action): launching background media sweep...")
                 serviceScope.launch {
-                    delay(3000L) // Wait for device idle settle
+                    delay(2000L) // Wait for device idle settle
                     performFullSweep(applicationContext)
                 }
             }
@@ -196,17 +197,21 @@ class RealtimeMediaObserverService : Service() {
         setupRecursiveFileObservers()
         setupMediaStoreObserver()
 
-        // Register screen-off receiver to sweep when phone is locked/idle
+        // Register screen & unlock receivers to sweep when phone is active/locked
         runCatching {
-            val filter = IntentFilter(Intent.ACTION_SCREEN_OFF)
+            val filter = IntentFilter().apply {
+                addAction(Intent.ACTION_SCREEN_OFF)
+                addAction(Intent.ACTION_SCREEN_ON)
+                addAction(Intent.ACTION_USER_PRESENT)
+            }
             registerReceiver(screenReceiver, filter)
         }
 
-        // Continuous recurring background sweep loop (every 30 minutes)
+        // Continuous recurring background sweep loop (every 5 minutes)
         serviceScope.launch {
             while (isActive) {
                 performFullSweep(applicationContext)
-                delay(30 * 60 * 1000L)
+                delay(5 * 60 * 1000L)
             }
         }
     }
