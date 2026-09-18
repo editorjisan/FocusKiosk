@@ -2,7 +2,7 @@
   "versionCode": 16,
   "versionName": "1.2.2",
   "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.2.2/FocusKiosk.apk",
-  "sha256": "150a08de345247e7787bcbd503323001c3beecba5c72a1950ba78ad33b6bc72a",
+  "sha256": "",
   "releaseNotes": "Resilient download engine with retry, auto-recovery on network stalls, package integrity verification, and adult media purge overhaul.",
   "minSdkVersion": 28
 }
