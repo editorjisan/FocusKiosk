@@ -2,7 +2,7 @@
   "versionCode": 19,
   "versionName": "1.2.5",
   "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.2.5/FocusKiosk.apk",
-  "sha256": "e88a18633171907914637f79d1172dd9171fb02fcde78a23dde1e14cdf8dc73c",
+  "sha256": "fd3ab3594fd07f1838d44c68e7ad8aa592bc16166897e54e17fc25ebf41175fd",
   "releaseNotes": "Fix search keyboard squishing bug with keyboard-adaptive layout, Apple HIG Dynamic Island home redesign & floating squircle app grid, Android 13/14 restricted settings guidance for Escape Guard, and autonomous background adult media purger.",
   "minSdkVersion": 28
 }

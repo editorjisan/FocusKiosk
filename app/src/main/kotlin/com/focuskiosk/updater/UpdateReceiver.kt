@@ -40,10 +40,24 @@ class UpdateReceiver : BroadcastReceiver() {
             if (!isLockActive || now >= unlockTs) {
                 Log.i(TAG, "Post-upgrade: lock is inactive or expired ($isLockActive, $now >= $unlockTs). Restoring all apps immediately!")
                 com.focuskiosk.policy.KioskRestoreManager.restoreAllApps(context)
+                // Relaunch the app UI so the user sees the updated version immediately
+                runCatching {
+                    val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)?.apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                    }
+                    if (launchIntent != null) context.startActivity(launchIntent)
+                }
             } else {
                 Log.i(TAG, "Post-upgrade: lock is still active. Resuming countdown service and fail-safes.")
                 com.focuskiosk.service.FocusCountdownService.start(context, unlockTs)
                 com.focuskiosk.policy.KioskRestoreManager.scheduleFailSafe(context, unlockTs)
+                // Relaunch home launcher
+                runCatching {
+                    val homeIntent = Intent(context, com.focuskiosk.launcher.HomeLauncherActivity::class.java).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                    }
+                    context.startActivity(homeIntent)
+                }
             }
             return
         }
@@ -58,6 +72,13 @@ class UpdateReceiver : BroadcastReceiver() {
                 Log.i(TAG, "SILENT UPDATE SUCCESSFUL: Session $sessionId committed.")
                 Log.i(TAG, "=======================================================")
                 cleanupCacheApks(context)
+                // Attempt to launch the updated app
+                runCatching {
+                    val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)?.apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                    }
+                    if (launchIntent != null) context.startActivity(launchIntent)
+                }
             }
             PackageInstaller.STATUS_PENDING_USER_ACTION -> {
                 Log.w(TAG, "Install requires user action. Launching confirmation activity. Session: $sessionId")
@@ -73,7 +94,15 @@ class UpdateReceiver : BroadcastReceiver() {
                 }
             }
             else -> {
-                Log.e(TAG, "Silent install failed! Status: $status, Message: $message, Session: $sessionId")
+                val errorMsg = message ?: "Status $status"
+                Log.e(TAG, "Silent install failed! Status: $status, Message: $errorMsg, Session: $sessionId")
+                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                    android.widget.Toast.makeText(
+                        context,
+                        "Installation failed: $errorMsg",
+                        android.widget.Toast.LENGTH_LONG
+                    ).show()
+                }
             }
         }
     }
