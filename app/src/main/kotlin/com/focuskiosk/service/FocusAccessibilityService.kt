@@ -8,14 +8,14 @@ import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.Toast
+import com.focuskiosk.policy.PolicyEnforcer
+import com.focuskiosk.storage.SecureStorage
 
 /**
  * FocusAccessibilityService
  * ─────────────────────────
- * Real-time guard intercepting unauthorized in-app web browsing and social media escapes.
- * Specifically targets Messenger's internal BrowserLiteActivity and WebView windows
- * when users click shared Facebook Reels or links, instantly dismissing the browser
- * and returning the user to the chat within 50ms.
+ * Real-time guard intercepting unauthorized in-app web browsing, social media escapes,
+ * and launches of blocked applications via notifications or deep links.
  */
 @Suppress("DEPRECATION")
 class FocusAccessibilityService : AccessibilityService() {
@@ -79,6 +79,32 @@ class FocusAccessibilityService : AccessibilityService() {
 
         val pkg = event.packageName?.toString() ?: return
         val className = event.className?.toString() ?: ""
+
+        // 1. Zero-Tolerance Blocked App Trap: Blocks access via notification taps, deep links, or recents
+        if (SecureStorage.getBoolean(applicationContext, SecureStorage.KEY_LOCK_ACTIVE, false)) {
+            val blockedPkgs = SecureStorage.getBlockedPackages(applicationContext)
+            if (pkg in blockedPkgs) {
+                val now = System.currentTimeMillis()
+                if (now - lastActionTimestamp > 400L) {
+                    lastActionTimestamp = now
+                    Log.w(TAG, "BLOCKED APP TRAP: Intercepted unauthorized launch for '$pkg'! Dismissing to Home...")
+                    performGlobalAction(GLOBAL_ACTION_HOME)
+                    runCatching {
+                        PolicyEnforcer.suspendPackages(applicationContext, arrayOf(pkg))
+                        PolicyEnforcer.hideApplication(applicationContext, pkg)
+                    }
+                    FocusNotificationService.clearBlockedNotifications(applicationContext)
+                    mainHandler.post {
+                        Toast.makeText(
+                            applicationContext,
+                            "Focus Kiosk: Notifications & access for this app are blocked during Focus Mode.",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                }
+                return
+            }
+        }
 
         val isSocialApp = pkg == "com.facebook.orca" || pkg == "com.facebook.katana" ||
                           pkg == "com.facebook.lite" || pkg == "com.facebook.mlite" ||

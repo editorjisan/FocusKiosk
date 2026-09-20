@@ -44,6 +44,11 @@ class RealtimeMediaObserverService : Service() {
             scannedCleanCache.remove(path)
         }
 
+        fun clearCache() {
+            scannedCleanCache.clear()
+            Log.i(TAG, "scannedCleanCache reset for fresh modesty evaluation.")
+        }
+
         fun start(context: Context) {
             try {
                 val intent = Intent(context, RealtimeMediaObserverService::class.java)
@@ -215,6 +220,7 @@ class RealtimeMediaObserverService : Service() {
     override fun onCreate() {
         super.onCreate()
         Log.i(TAG, "Initializing real-time recursive media sentinel...")
+        clearCache()
         setupRecursiveFileObservers()
         setupMediaStoreObserver()
 

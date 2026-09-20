@@ -16,6 +16,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
 import com.focuskiosk.admin.FocusDeviceAdminReceiver
+import com.focuskiosk.service.FocusNotificationService
 import com.focuskiosk.storage.SecureStorage
 
 /**
@@ -109,6 +110,120 @@ object PolicyEnforcer {
         runCatching {
             dpm(context).setPackagesSuspended(admin(context), packages, false)
         }.onFailure { Log.e(TAG, "unsuspendPackages: ${it.message}") }
+    }
+
+    // ── Automated Notification Suppression & Restoration ─────────────────────
+
+    /**
+     * Suppresses all notifications for the given list of packages.
+     * 1. On Android 13+ (API 33+): Denies POST_NOTIFICATIONS runtime permission via DPM.
+     * 2. On Android 9-12 (API 28-32): Sets AppOps OP_POST_NOTIFICATION (11) to MODE_IGNORED.
+     * 3. Purges any active notifications already posted by these packages via FocusNotificationService.
+     */
+    fun suppressNotifications(context: Context, packages: List<String>) {
+        if (!requireDeviceOwner(context) || packages.isEmpty()) return
+
+        // 1. Android 13+ POST_NOTIFICATIONS runtime permission denial
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            for (pkg in packages) {
+                runCatching {
+                    dpm(context).setPermissionGrantState(
+                        admin(context),
+                        pkg,
+                        "android.permission.POST_NOTIFICATIONS",
+                        DevicePolicyManager.PERMISSION_GRANT_STATE_DENIED
+                    )
+                }
+            }
+            Log.i(TAG, "Denied POST_NOTIFICATIONS for ${packages.size} packages.")
+        }
+
+        // 2. AppOpsManager OP_POST_NOTIFICATION (11) suppression for Android 9-12
+        runCatching {
+            val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as? android.app.AppOpsManager
+            if (appOps != null) {
+                val setModeMethod = appOps.javaClass.getMethod(
+                    "setMode",
+                    Int::class.javaPrimitiveType,
+                    Int::class.javaPrimitiveType,
+                    String::class.java,
+                    Int::class.javaPrimitiveType
+                )
+                for (pkg in packages) {
+                    runCatching {
+                        val uid = context.packageManager.getPackageUid(pkg, 0)
+                        setModeMethod.invoke(appOps, 11, uid, pkg, android.app.AppOpsManager.MODE_IGNORED)
+                    }
+                }
+                Log.i(TAG, "Set AppOps OP_POST_NOTIFICATION=MODE_IGNORED for ${packages.size} packages.")
+            }
+        }
+
+        // 3. Ensure NotificationListenerService is enabled via Secure Settings
+        enableNotificationListenerSilently(context)
+
+        // 4. Purge existing notifications currently sitting in the shade
+        FocusNotificationService.clearBlockedNotifications(context)
+    }
+
+    /**
+     * Restores notifications for packages when Focus Mode unlocks.
+     * 1. On Android 13+ (API 33+): Re-grants POST_NOTIFICATIONS runtime permission.
+     * 2. On Android 9-12 (API 28-32): Restores AppOps OP_POST_NOTIFICATION to MODE_ALLOWED.
+     */
+    fun restoreNotifications(context: Context, packages: List<String>) {
+        if (!requireDeviceOwner(context) || packages.isEmpty()) return
+
+        // 1. Android 13+ POST_NOTIFICATIONS runtime permission restoration
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            for (pkg in packages) {
+                runCatching {
+                    dpm(context).setPermissionGrantState(
+                        admin(context),
+                        pkg,
+                        "android.permission.POST_NOTIFICATIONS",
+                        DevicePolicyManager.PERMISSION_GRANT_STATE_GRANTED
+                    )
+                }
+            }
+            Log.i(TAG, "Granted POST_NOTIFICATIONS for ${packages.size} restored packages.")
+        }
+
+        // 2. AppOpsManager OP_POST_NOTIFICATION (11) restoration for Android 9-12
+        runCatching {
+            val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as? android.app.AppOpsManager
+            if (appOps != null) {
+                val setModeMethod = appOps.javaClass.getMethod(
+                    "setMode",
+                    Int::class.javaPrimitiveType,
+                    Int::class.javaPrimitiveType,
+                    String::class.java,
+                    Int::class.javaPrimitiveType
+                )
+                for (pkg in packages) {
+                    runCatching {
+                        val uid = context.packageManager.getPackageUid(pkg, 0)
+                        setModeMethod.invoke(appOps, 11, uid, pkg, android.app.AppOpsManager.MODE_ALLOWED)
+                    }
+                }
+                Log.i(TAG, "Restored AppOps OP_POST_NOTIFICATION=MODE_ALLOWED for ${packages.size} packages.")
+            }
+        }
+    }
+
+    fun enableNotificationListenerSilently(context: Context) {
+        val componentName = "${context.packageName}/${FocusNotificationService::class.java.name}"
+        runCatching {
+            val current = Settings.Secure.getString(
+                context.contentResolver,
+                "enabled_notification_listeners"
+            ) ?: ""
+            if (!current.contains(componentName)) {
+                val newValue = if (current.isEmpty()) componentName else "$current:$componentName"
+                dpm(context).setSecureSetting(admin(context), "enabled_notification_listeners", newValue)
+                Log.i(TAG, "Enabled notification listener in Secure Settings: $newValue")
+            }
+        }.onFailure { Log.w(TAG, "Failed setting enabled_notification_listeners: ${it.message}") }
     }
 
     // ── Install restrictions ──────────────────────────────────────────────────
@@ -363,6 +478,9 @@ object PolicyEnforcer {
             val failed = dpm(context).setPackagesSuspended(admin(context), safeToSuspend, true)
             Log.i(TAG, "Bulk suspended ${safeToSuspend.size - (failed?.size ?: 0)} packages in <30ms.")
         }.onFailure { Log.w(TAG, "setPackagesSuspended bulk failed: ${it.message}") }
+
+        // 3b. AUTOMATIC NOTIFICATION SUPPRESSION: Revoke notification permissions & purge shade
+        suppressNotifications(context, toBlock)
 
         // 4. Concurrently hide each non-whitelisted app in parallel batches (10x faster than sequential)
         val chunks = toBlock.chunked(20)

@@ -140,6 +140,9 @@ object KioskRestoreManager {
         }
         Log.i(TAG, "Concurrently unhidden ${packagesToRestore.size} applications.")
 
+        // 4b. AUTOMATIC NOTIFICATION RESTORATION: Re-enable notifications for all restored packages
+        PolicyEnforcer.restoreNotifications(appContext, packagesToRestore.toList())
+
 
 
         // 5. Restore user restrictions (unblock all installs, ADB, factory reset, unknown sources)

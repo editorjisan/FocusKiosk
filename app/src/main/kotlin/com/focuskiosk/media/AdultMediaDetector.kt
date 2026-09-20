@@ -29,8 +29,8 @@ object AdultMediaDetector {
 
     private const val TAG = "AdultMediaDetector"
     private const val THUMB_SIZE = 64
-    private const val SKIN_THRESHOLD = 0.07f
-    private const val TRASH_SKIN_THRESHOLD = 0.04f
+    private const val SKIN_THRESHOLD = 0.055f
+    private const val TRASH_SKIN_THRESHOLD = 0.035f
 
     private val ADULT_KEYWORDS = setOf(
         // English standard & explicit
@@ -39,25 +39,38 @@ object AdultMediaDetector {
         "sensual", "camgirl", "playboy", "hardcore", "softcore", "slut", "whore",
         "penetration", "masturbat", "ejaculat", "blowjob", "handjob", "creampie",
         "milf", "bdsm", "fetish", "anal", "dildo", "tits", "titties", "ass", "cunt",
-        "cock", "orgasm", "gangbang", "threesome", "incest", "taboo", "panties", "lingerie",
-        // Revealing / Swimwear / Bikini / Revealing Memes
-        "bikini", "swimsuit", "swimwear", "bra", "panty", "underwear", "thong",
-        "cleavage", "navel", "belly", "waist", "thigh", "thighs", "mini_skirt", "miniskirt",
-        "crop_top", "croptop", "exposed", "hot_model", "sexy", "romance", "kiss", "kissing",
-        "bed_scene", "intimate", "deep_neck", "saree_hot", "blouse_hot", "hot_meme", "meme_hot",
+        "cock", "orgasm", "gangbang", "threesome", "incest", "taboo",
+        // Innerwear, Lingerie & Modesty / Sexual items
+        "bra", "bras", "brassiere", "panty", "panties", "underwear", "undies", "undergarment",
+        "lingerie", "thong", "thongs", "gstring", "g_string", "corset", "nighty", "nightie",
+        "babydoll", "bodysuit", "monokini", "bikini", "swimsuit", "swimwear", "beachwear",
+        // Revealing Clothes & Body Exposure (Bangladeshi / Islamic context)
+        "cleavage", "navel", "belly", "waist", "midriff", "thigh", "thighs", "barelegs",
+        "bare_legs", "mini_skirt", "miniskirt", "crop_top", "croptop", "hotpants", "hot_pants",
+        "short_dress", "exposed", "topless", "bottomless", "saree_hot", "blouse_hot",
+        "hot_saree", "hot_blouse", "sari_hot", "open_blouse", "deep_neck", "deepneck",
+        "low_cut", "lowcut", "backless", "sleeveless_hot",
+        // Sexual posts, postures & social media
+        "sexy_post", "hot_post", "sex_post", "erotic_post", "sexy_girl", "hot_girl",
+        "hot_model", "sexy_model", "sexy_babe", "hot_babe", "curvy_girl", "curvy_model",
+        "voluptuous", "seductive", "provocative", "bed_scene", "bedroom", "kiss", "kissing",
+        "lipkiss", "lip_kiss", "intimate", "intimacy", "romance_hot", "hot_romance",
+        "twerk", "twerking", "booty", "butt", "ass_pic", "boobies", "sideboob", "underboob",
+        "nude_pic", "naked", "erotica", "hot_meme", "meme_hot",
         // Desi / Bengali / Hindi transliterations
-        "bhabhi", "boudi", "choti", "magi", "khanki", "choda", "chodi", "chudi", "chudai",
-        "gopon", "sexvideo", "desi", "mal", "viral", "scandal", "leak", "leaked", "mms",
-        "hot_video", "hotvideo", "callgirl", "escort", "savita", "sunny", "mia", "khalifa",
-        "actress", "aunty", "room_video", "hotel_video", "kamasutra", "boudi_hot", "bhabhi_hot",
-        "desi_hot", "tiktok_hot", "reels_hot", "actress_hot", "viral_hot",
+        "bhabhi", "bhabhi_hot", "boudi", "boudi_hot", "choti", "bangla_choti", "magi",
+        "khanki", "choda", "chodi", "chudi", "chudai", "chodachodi", "gopon", "dudh", "gud",
+        "nengta", "nangla", "langta", "mal", "viral_hot", "tiktok_hot", "reels_hot",
+        "desisex", "banglasex", "desi_hot", "actress_hot", "kolkata_hot", "dhaka_hot",
+        "bd_hot", "callgirl", "escort", "savita", "sunny", "mia", "khalifa", "kamasutra",
+        "actress", "aunty", "room_video", "hotel_video",
         // Major adult sites & studios
         "xhamster", "xvideos", "xnxx", "brazzers", "pornhub", "redtube", "youporn",
         "spankbang", "eporner", "beeg", "tubegalore", "chaturbate", "stripchat", "bangbros",
         "naughtyamerica", "evilangel", "realitykings", "twistys"
     )
 
-    private val IMAGE_EXTENSIONS = setOf("jpg", "jpeg", "png", "webp", "gif", "bmp")
+    private val IMAGE_EXTENSIONS = setOf("jpg", "jpeg", "png", "webp", "gif", "bmp", "jfif")
     private val VIDEO_EXTENSIONS = setOf("mp4", "mkv", "avi", "3gp", "mov", "webm", "flv", "wmv", "ts")
 
     fun isMediaFile(file: File): Boolean {
@@ -103,7 +116,11 @@ object AdultMediaDetector {
 
     private fun analyzeImage(file: File, isTrash: Boolean): Boolean {
         val boundsOptions = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        BitmapFactory.decodeFile(file.absolutePath, boundsOptions)
+        runCatching {
+            java.io.FileInputStream(file).use { fis ->
+                BitmapFactory.decodeStream(fis, null, boundsOptions)
+            }
+        }.getOrNull() ?: BitmapFactory.decodeFile(file.absolutePath, boundsOptions)
         val width = boundsOptions.outWidth
         val height = boundsOptions.outHeight
         if (width <= 0 || height <= 0) return false
@@ -117,7 +134,11 @@ object AdultMediaDetector {
             inSampleSize = sampleSize
             inPreferredConfig = Bitmap.Config.RGB_565
         }
-        val rawBitmap = BitmapFactory.decodeFile(file.absolutePath, decodeOptions) ?: return false
+        val rawBitmap = runCatching {
+            java.io.FileInputStream(file).use { fis ->
+                BitmapFactory.decodeStream(fis, null, decodeOptions)
+            }
+        }.getOrNull() ?: BitmapFactory.decodeFile(file.absolutePath, decodeOptions) ?: return false
         val thumb = Bitmap.createScaledBitmap(rawBitmap, THUMB_SIZE, THUMB_SIZE, true)
         if (thumb != rawBitmap) rawBitmap.recycle()
 
@@ -193,6 +214,8 @@ object AdultMediaDetector {
         val globalRatio: Float,
         val centerRatio: Float,
         val upperCenterRatio: Float,
+        val cleavageRatio: Float,
+        val midriffRatio: Float,
         val lowerCenterRatio: Float,
         val lowerBodyRatio: Float,
         val torsoRatio: Float,
@@ -209,18 +232,22 @@ object AdultMediaDetector {
         val y = (299 * r + 587 * g + 114 * b) / 1000
         val cr = ((r - y) * 713) / 1000 + 128
         val cb = ((b - y) * 564) / 1000 + 128
-        val isYcbcr = (cr in 115..185) && (cb in 68..145)
+        val isYcbcr = (cr in 115..188) && (cb in 65..148)
 
         // 1. Standard RGB human skin (Peer et al.)
         val isRgbStandard = (r > 60 && g > 25 && b > 15 &&
                             r >= g && (r - b) >= 4 &&
                             (maxOf(r, g, b) - minOf(r, g, b)) > 8)
 
-        // 2. Fair / Asian / Porcelain / Filtered / Indoor Cool Skin (Page 1 & Page 2)
-        val isRgbFair = (r > 150 && g > 115 && b > 85 &&
-                         (r + 5) >= g && (r + g) > (2 * b) && Math.abs(r - g) <= 60)
+        // 2. Fair / Asian / Porcelain / Filtered / Indoor Cool Skin
+        val isRgbFair = (r > 140 && g > 110 && b > 80 &&
+                         (r + 5) >= g && (r + g) > (2 * b) && Math.abs(r - g) <= 65)
 
-        // 3. Fast HSV hue & saturation without object allocations
+        // 3. South Asian / Bengali / Olive / Wheatish / Brown / Dusky Skin
+        val isRgbSouthAsian = (r in 50..230 && g in 30..190 && b in 15..155 &&
+                               r >= g && (r - b) >= 6 && (r + g) > (2 * b))
+
+        // 4. Fast HSV hue & saturation without object allocations
         val max = maxOf(r, maxOf(g, b))
         val min = minOf(r, minOf(g, b))
         val delta = max - min
@@ -239,7 +266,9 @@ object AdultMediaDetector {
                (isRgbStandard && isYcbcr) ||
                (isRgbFair && isHsv) ||
                (isRgbFair && isYcbcr) ||
-               (isRgbStandard && isHsv && cr > 118)
+               (isRgbSouthAsian && isYcbcr) ||
+               (isRgbSouthAsian && isHsv) ||
+               (isRgbStandard && isHsv && cr > 116)
     }
 
     private fun analyzeSkinZones(bitmap: Bitmap): SkinZoneResult {
@@ -276,19 +305,25 @@ object AdultMediaDetector {
         // 1. Center box (middle 50% width and 50% height)
         val centerRatio = ratioInBox(w / 4, h / 4, (3 * w) / 4, (3 * h) / 4)
 
-        // 2. Upper center (cleavage, breasts, bikini tops, exposed chest & shoulders)
-        val upperCenterRatio = ratioInBox(w / 6, (h * 10) / 100, (5 * w) / 6, (h * 55) / 100)
+        // 2. Upper center (cleavage, breasts, bra cups, exposed chest & shoulders)
+        val upperCenterRatio = ratioInBox(w / 6, (h * 10) / 100, (5 * w) / 6, (h * 50) / 100)
 
-        // 3. Lower center (pelvic, bikini bottom, thighs, buttocks)
+        // 3. Cleavage specific box (deep necklines, plunging bras/tops)
+        val cleavageRatio = ratioInBox(w / 5, (h * 12) / 100, (4 * w) / 5, (h * 42) / 100)
+
+        // 4. Midriff & Belly (navel, waist, crop tops, saree blouses, bra/panty gap)
+        val midriffRatio = ratioInBox(w / 5, (h * 25) / 100, (4 * w) / 5, (h * 65) / 100)
+
+        // 5. Lower center (panties, bikini bottom, groin, thighs, buttocks)
         val lowerCenterRatio = ratioInBox(w / 6, (h * 40) / 100, (5 * w) / 6, (h * 85) / 100)
 
-        // 4. Lower body half (bare legs, thighs, underwear, swim briefs - Page 2)
+        // 6. Lower body half (bare legs, thighs, underwear, swim briefs, shorts)
         val lowerBodyRatio = ratioInBox(0, h / 2, w, h)
 
-        // 5. Torso vertical strip (cutout swimsuits, monokinis, midriff, navel - Page 1)
-        val torsoRatio = ratioInBox(w / 4, (h * 20) / 100, (3 * w) / 4, (h * 80) / 100)
+        // 7. Torso vertical strip (cutout swimsuits, monokinis, lingerie, revealing dresses)
+        val torsoRatio = ratioInBox(w / 4, (h * 15) / 100, (3 * w) / 4, (h * 85) / 100)
 
-        // 6. 2x2 Quadrants + center quadrant
+        // 8. 2x2 Quadrants + center quadrant
         val halfW = w / 2
         val halfH = h / 2
         val q1 = ratioInBox(0, 0, halfW, halfH)
@@ -301,6 +336,8 @@ object AdultMediaDetector {
             globalRatio = globalRatio,
             centerRatio = centerRatio,
             upperCenterRatio = upperCenterRatio,
+            cleavageRatio = cleavageRatio,
+            midriffRatio = midriffRatio,
             lowerCenterRatio = lowerCenterRatio,
             lowerBodyRatio = lowerBodyRatio,
             torsoRatio = torsoRatio,
@@ -311,20 +348,24 @@ object AdultMediaDetector {
     private fun isSkinExcessive(z: SkinZoneResult, isTrash: Boolean): Boolean {
         return if (isTrash) {
             z.globalRatio >= TRASH_SKIN_THRESHOLD ||
-            z.centerRatio >= 0.05f ||
-            z.upperCenterRatio >= 0.05f ||
-            z.lowerCenterRatio >= 0.05f ||
-            z.lowerBodyRatio >= 0.05f ||
-            z.torsoRatio >= 0.05f ||
-            z.maxQuadrantRatio >= 0.06f
+            z.centerRatio >= 0.04f ||
+            z.upperCenterRatio >= 0.04f ||
+            z.cleavageRatio >= 0.04f ||
+            z.midriffRatio >= 0.04f ||
+            z.lowerCenterRatio >= 0.04f ||
+            z.lowerBodyRatio >= 0.04f ||
+            z.torsoRatio >= 0.04f ||
+            z.maxQuadrantRatio >= 0.05f
         } else {
-            z.globalRatio >= SKIN_THRESHOLD ||       // >= 0.07f
-            z.centerRatio >= 0.09f ||                // >= 9% center body
-            z.upperCenterRatio >= 0.08f ||           // >= 8% cleavage / exposed shoulders / chest
-            z.lowerCenterRatio >= 0.08f ||           // >= 8% bikini bottom / thighs / buttocks
-            z.lowerBodyRatio >= 0.08f ||             // >= 8% bare legs/thighs in lower body (Page 2)
-            z.torsoRatio >= 0.08f ||                 // >= 8% monokini / cutout / midriff (Page 1)
-            z.maxQuadrantRatio >= 0.11f              // >= 11% in any quadrant (close-ups, Page 3, 4)
+            z.globalRatio >= SKIN_THRESHOLD ||       // >= 0.055f (5.5%)
+            z.centerRatio >= 0.07f ||                // >= 7% center body
+            z.upperCenterRatio >= 0.06f ||           // >= 6% cleavage / bra / exposed shoulders
+            z.cleavageRatio >= 0.06f ||              // >= 6% deep-neck / cleavage
+            z.midriffRatio >= 0.06f ||               // >= 6% exposed navel / belly / saree blouse / bra gap
+            z.lowerCenterRatio >= 0.06f ||           // >= 6% panties / bikini bottom / thighs / buttocks
+            z.lowerBodyRatio >= 0.06f ||             // >= 6% bare legs / thighs
+            z.torsoRatio >= 0.06f ||                 // >= 6% monokini / lingerie / swimsuit
+            z.maxQuadrantRatio >= 0.09f              // >= 9% close-up cropped shots
         }
     }
 
