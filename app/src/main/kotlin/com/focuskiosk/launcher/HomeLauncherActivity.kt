@@ -66,7 +66,7 @@ class HomeLauncherActivity : AppCompatActivity() {
 
         // Redirect to setup wizard on first launch.
         if (!SecureStorage.isSetupCompleted(this)) {
-            startActivity(Intent(this, SetupWizardActivity::class.java))
+            startActivity(Intent(this, com.focuskiosk.MainActivity::class.java))
             return // Do not finish() — stay as the home stack root.
         }
 

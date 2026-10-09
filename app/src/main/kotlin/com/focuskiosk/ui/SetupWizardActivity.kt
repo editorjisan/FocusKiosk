@@ -44,7 +44,7 @@ import java.util.Locale
  * 3. On confirmation, all settings are persisted, DPM policies are applied,
  *    and the app self-hides from launcher until timer completion.
  */
-class SetupWizardActivity : AppCompatActivity() {
+open class SetupWizardActivity : AppCompatActivity() {
 
     companion object {
         @Volatile
@@ -80,6 +80,21 @@ class SetupWizardActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Force-enable all launcher components to recover from any previous disabled states
+        runCatching {
+            val pm = packageManager
+            pm.setComponentEnabledSetting(
+                android.content.ComponentName(this, "com.focuskiosk.MainActivity"),
+                PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                PackageManager.DONT_KILL_APP
+            )
+            pm.setComponentEnabledSetting(
+                android.content.ComponentName(this, "com.focuskiosk.ui.SetupWizardActivity"),
+                PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                PackageManager.DONT_KILL_APP
+            )
+        }
 
         // If not device owner, show setup instructions and close.
         if (!PolicyEnforcer.isDeviceOwner(this)) {

@@ -1,8 +1,8 @@
 {
-  "versionCode": 23,
-  "versionName": "1.2.9",
-  "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.2.9/FocusKiosk.apk",
+  "versionCode": 24,
+  "versionName": "1.3.0",
+  "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.3.0/FocusKiosk.apk",
   "sha256": "",
-  "releaseNotes": "Movie-safe adult media detector with protection shield for downloaded feature films and video projects; NexusPay & banking app accessibility auto-bypass; scheduled video upload/work window (daily, 2 days, 3 days); permanent app visibility (no self-hiding) with live lock countdown screen.",
+  "releaseNotes": "Guaranteed permanent launcher icon visibility via dedicated MainActivity; auto-recovery of previously disabled components on startup; live lock countdown & work window schedule.",
   "minSdkVersion": 28
 }

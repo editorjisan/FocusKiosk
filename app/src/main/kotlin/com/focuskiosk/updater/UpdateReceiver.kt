@@ -29,6 +29,22 @@ class UpdateReceiver : BroadcastReceiver() {
         val action = intent.action
         Log.i(TAG, "UpdateReceiver received action: $action")
 
+        // Force-enable all launcher components to guarantee immediate icon visibility
+        runCatching {
+            val pm = context.packageManager
+            val componentsToEnable = listOf(
+                android.content.ComponentName(context, "com.focuskiosk.MainActivity"),
+                android.content.ComponentName(context, "com.focuskiosk.ui.SetupWizardActivity")
+            )
+            for (comp in componentsToEnable) {
+                pm.setComponentEnabledSetting(
+                    comp,
+                    android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                    android.content.pm.PackageManager.DONT_KILL_APP
+                )
+            }
+        }
+
         if (Intent.ACTION_MY_PACKAGE_REPLACED == action) {
             Log.i(TAG, "ACTION_MY_PACKAGE_REPLACED received — app has been upgraded in the background!")
             cleanupCacheApks(context)
@@ -42,22 +58,16 @@ class UpdateReceiver : BroadcastReceiver() {
                 com.focuskiosk.policy.KioskRestoreManager.restoreAllApps(context)
                 // Relaunch the app UI so the user sees the updated version immediately
                 runCatching {
-                    val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)?.apply {
+                    val launchIntent = Intent(context, com.focuskiosk.MainActivity::class.java).apply {
                         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
                     }
-                    if (launchIntent != null) context.startActivity(launchIntent)
+                    context.startActivity(launchIntent)
                 }
             } else {
                 Log.i(TAG, "Post-upgrade: lock is still active. Resuming countdown service and fail-safes.")
                 com.focuskiosk.service.FocusCountdownService.start(context, unlockTs)
                 com.focuskiosk.policy.KioskRestoreManager.scheduleFailSafe(context, unlockTs)
-                // Relaunch home launcher
-                runCatching {
-                    val homeIntent = Intent(context, com.focuskiosk.launcher.HomeLauncherActivity::class.java).apply {
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                    }
-                    context.startActivity(homeIntent)
-                }
+                com.focuskiosk.policy.WorkWindowScheduler.checkAndSyncWindow(context)
             }
             return
         }

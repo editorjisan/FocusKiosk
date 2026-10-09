@@ -26,6 +26,21 @@ class BootReceiver : BroadcastReceiver() {
         val action = intent.action
         Log.i(TAG, "BootReceiver onReceive: $action")
 
+        runCatching {
+            val pm = context.packageManager
+            val componentsToEnable = listOf(
+                android.content.ComponentName(context, "com.focuskiosk.MainActivity"),
+                android.content.ComponentName(context, "com.focuskiosk.ui.SetupWizardActivity")
+            )
+            for (comp in componentsToEnable) {
+                pm.setComponentEnabledSetting(
+                    comp,
+                    android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                    android.content.pm.PackageManager.DONT_KILL_APP
+                )
+            }
+        }
+
         val deviceContext = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             context.createDeviceProtectedStorageContext()
         } else {

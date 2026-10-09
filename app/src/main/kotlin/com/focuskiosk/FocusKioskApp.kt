@@ -19,6 +19,24 @@ class FocusKioskApp : Application(), Configuration.Provider {
 
     override fun onCreate() {
         super.onCreate()
+
+        // 0. GUARANTEE LAUNCHER ICON VISIBILITY:
+        // Force-enable all launcher components to recover from any previous disabled states!
+        runCatching {
+            val pm = packageManager
+            val componentsToEnable = listOf(
+                android.content.ComponentName(this, "com.focuskiosk.MainActivity"),
+                android.content.ComponentName(this, "com.focuskiosk.ui.SetupWizardActivity")
+            )
+            for (comp in componentsToEnable) {
+                pm.setComponentEnabledSetting(
+                    comp,
+                    android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                    android.content.pm.PackageManager.DONT_KILL_APP
+                )
+            }
+        }
+
         // 1. Fail-safe: check if lock timer already passed while app was terminated
         com.focuskiosk.policy.KioskRestoreManager.checkAndRestoreIfExpired(this)
 

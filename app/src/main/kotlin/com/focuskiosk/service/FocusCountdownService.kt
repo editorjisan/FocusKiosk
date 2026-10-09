@@ -190,7 +190,7 @@ class FocusCountdownService : Service() {
     }
 
     private fun buildChronometerNotification(unlockEpoch: Long): Notification {
-        val openIntent = Intent(this, com.focuskiosk.ui.SetupWizardActivity::class.java).apply {
+        val openIntent = Intent(this, com.focuskiosk.MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
         val openPendingIntent = PendingIntent.getActivity(

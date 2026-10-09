@@ -185,16 +185,21 @@ object KioskRestoreManager {
             PolicyEnforcer.clearWebFiltering(appContext)
         }
 
-        // 8. Re-enable the SetupWizardActivity component so the user can re-open FocusKiosk
+        // 8. Re-enable all launcher components so the user can re-open FocusKiosk
         runCatching {
-            val component = ComponentName(appContext, "com.focuskiosk.ui.SetupWizardActivity")
-            pm.setComponentEnabledSetting(
-                component,
-                PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
-                PackageManager.DONT_KILL_APP
+            val componentsToEnable = listOf(
+                ComponentName(appContext, "com.focuskiosk.MainActivity"),
+                ComponentName(appContext, "com.focuskiosk.ui.SetupWizardActivity")
             )
-            Log.i(TAG, "Re-enabled SetupWizardActivity component.")
-        }.onFailure { Log.w(TAG, "Failed re-enabling SetupWizardActivity: ${it.message}") }
+            for (comp in componentsToEnable) {
+                pm.setComponentEnabledSetting(
+                    comp,
+                    PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                    PackageManager.DONT_KILL_APP
+                )
+            }
+            Log.i(TAG, "Re-enabled all launcher components.")
+        }.onFailure { Log.w(TAG, "Failed re-enabling launcher components: ${it.message}") }
 
         // 8. Update persistent secure state
         SecureStorage.putBoolean(appContext, SecureStorage.KEY_LOCK_ACTIVE, false)
@@ -249,7 +254,7 @@ object KioskRestoreManager {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
 
-            val showIntent = Intent(appContext, com.focuskiosk.ui.SetupWizardActivity::class.java).apply {
+            val showIntent = Intent(appContext, com.focuskiosk.MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             }
             val showPendingIntent = PendingIntent.getActivity(
