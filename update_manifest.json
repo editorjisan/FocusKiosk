@@ -1,8 +1,8 @@
 {
-  "versionCode": 22,
-  "versionName": "1.2.8",
-  "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.2.8/FocusKiosk.apk",
-  "sha256": "b0aaf7ac3cc5a228b3dc9625f2d21f86bea5b46b77d6a6413018309131097e36",
-  "releaseNotes": "Automated notification suppression and restoration for blocked apps (OS-level POST_NOTIFICATIONS denial, AppOps suppression, FocusNotificationService tray sweeper, and accessibility launch trap); deepened Islamic and Bangladeshi modesty detector targeting bras, panties, lingerie, midriffs, and cleavage with South Asian skin models.",
+  "versionCode": 23,
+  "versionName": "1.2.9",
+  "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.2.9/FocusKiosk.apk",
+  "sha256": "",
+  "releaseNotes": "Movie-safe adult media detector with protection shield for downloaded feature films and video projects; NexusPay & banking app accessibility auto-bypass; scheduled video upload/work window (daily, 2 days, 3 days); permanent app visibility (no self-hiding) with live lock countdown screen.",
   "minSdkVersion": 28
 }

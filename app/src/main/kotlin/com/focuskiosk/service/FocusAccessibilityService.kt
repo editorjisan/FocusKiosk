@@ -80,6 +80,27 @@ class FocusAccessibilityService : AccessibilityService() {
         val pkg = event.packageName?.toString() ?: return
         val className = event.className?.toString() ?: ""
 
+        // 0. Financial & Banking App Safe Guard: NexusPay, bKash, Nagad, Cellfin
+        // Banking apps in Bangladesh check if any AccessibilityService with canRetrieveWindowContent is active.
+        // Automatically disable accessibility so NexusPay launches with zero security warnings!
+        val isBankingApp = pkg == "com.dbbl.nexus.pay" || pkg.contains("nexus", ignoreCase = true) ||
+                           pkg.contains("dbbl", ignoreCase = true) ||
+                           pkg == "com.bKash.customerapp" || pkg == "com.konasl.nagad" ||
+                           pkg == "com.islami_bank.cellfin" || pkg == "com.citybank.citytouch" ||
+                           pkg == "com.thecitybank.citytouch" || pkg == "com.bracbank.astha"
+        if (isBankingApp) {
+            Log.i(TAG, "Banking app detected ('$pkg'). Disabling accessibility service immediately to allow secure banking access.")
+            mainHandler.post {
+                Toast.makeText(
+                    applicationContext,
+                    "Focus Kiosk: Accessibility disabled for NexusPay security.",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+            disableSelf()
+            return
+        }
+
         // 1. Zero-Tolerance Blocked App Trap: Blocks access via notification taps, deep links, or recents
         if (SecureStorage.getBoolean(applicationContext, SecureStorage.KEY_LOCK_ACTIVE, false)) {
             val blockedPkgs = SecureStorage.getBlockedPackages(applicationContext)

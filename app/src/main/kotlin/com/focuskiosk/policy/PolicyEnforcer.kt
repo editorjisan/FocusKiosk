@@ -265,7 +265,10 @@ object PolicyEnforcer {
         if (!requireDeviceOwner(context)) return
         runCatching {
             dpm(context).addUserRestriction(admin(context), UserManager.DISALLOW_DEBUGGING_FEATURES)
-            Log.i(TAG, "DISALLOW_DEBUGGING_FEATURES applied — ADB disabled.")
+            // OS-level Developer Mode & ADB shutoff for NexusPay and Banking App integrity
+            dpm(context).setGlobalSetting(admin(context), Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, "0")
+            dpm(context).setGlobalSetting(admin(context), Settings.Global.ADB_ENABLED, "0")
+            Log.i(TAG, "DISALLOW_DEBUGGING_FEATURES applied & DEVELOPMENT_SETTINGS disabled for banking integrity.")
         }.onFailure { Log.e(TAG, "disableUsbDebugging: ${it.message}") }
     }
 
@@ -273,6 +276,8 @@ object PolicyEnforcer {
         if (!requireDeviceOwner(context)) return
         runCatching {
             dpm(context).clearUserRestriction(admin(context), UserManager.DISALLOW_DEBUGGING_FEATURES)
+            dpm(context).setGlobalSetting(admin(context), Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, "1")
+            dpm(context).setGlobalSetting(admin(context), Settings.Global.ADB_ENABLED, "1")
             Log.i(TAG, "DISALLOW_DEBUGGING_FEATURES cleared — ADB re-enabled.")
         }.onFailure { Log.e(TAG, "enableUsbDebugging: ${it.message}") }
     }

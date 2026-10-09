@@ -49,6 +49,7 @@ class BootReceiver : BroadcastReceiver() {
             PolicyEnforcer.enforceOnBoot(context)
             FocusCountdownService.start(context, unlockEpoch)
             KioskRestoreManager.scheduleFailSafe(context, unlockEpoch)
+            com.focuskiosk.policy.WorkWindowScheduler.checkAndSyncWindow(context)
         }
     }
 }

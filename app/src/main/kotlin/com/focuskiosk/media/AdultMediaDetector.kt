@@ -29,42 +29,39 @@ object AdultMediaDetector {
 
     private const val TAG = "AdultMediaDetector"
     private const val THUMB_SIZE = 64
-    private const val SKIN_THRESHOLD = 0.055f
-    private const val TRASH_SKIN_THRESHOLD = 0.035f
+    private const val SKIN_THRESHOLD = 0.40f
+    private const val TRASH_SKIN_THRESHOLD = 0.25f
 
-    private val ADULT_KEYWORDS = setOf(
-        // English standard & explicit
-        "porn", "xxx", "sex", "nude", "nudity", "erotic", "adult", "nsfw", "hentai",
-        "boob", "boobs", "vagina", "dick", "pussy", "strip", "stripper", "onlyfans",
-        "sensual", "camgirl", "playboy", "hardcore", "softcore", "slut", "whore",
-        "penetration", "masturbat", "ejaculat", "blowjob", "handjob", "creampie",
-        "milf", "bdsm", "fetish", "anal", "dildo", "tits", "titties", "ass", "cunt",
-        "cock", "orgasm", "gangbang", "threesome", "incest", "taboo",
-        // Innerwear, Lingerie & Modesty / Sexual items
+    // Common movie release tokens that indicate legitimate feature films or television series
+    private val MOVIE_RELEASE_TAGS = setOf(
+        "1080p", "720p", "2160p", "4k", "bluray", "blu-ray", "web-dl", "webrip", "dvdrip", "hdrip",
+        "x264", "x265", "hevc", "h264", "h265", "aac", "dts", "yts", "yify", "rarbg", "psa",
+        "galaxyrg", "eztv", "subtitles", "season", "episode", "s01", "s02", "s03", "s04", "s05",
+        "s06", "s07", "s08", "e01", "e02", "e03", "e04", "e05", "e06", "e07", "e08"
+    )
+
+    // Unambiguous, standalone adult tokens (matched strictly as whole words/tokens, never substrings of normal words)
+    private val ADULT_EXACT_TOKENS = setOf(
+        // Explicit terms
+        "porn", "porno", "pornography", "xxx", "sex", "nude", "nudes", "nudity", "nsfw", "hentai",
+        "boob", "boobs", "vagina", "dick", "pussy", "stripper", "onlyfans",
+        "camgirl", "playboy", "hardcore", "softcore", "slut", "whore",
+        "penetration", "masturbat", "masturbation", "ejaculat", "ejaculation", "blowjob", "handjob", "creampie",
+        "milf", "bdsm", "fetish", "dildo", "cunt", "cock", "orgasm", "gangbang", "threesome", "incest",
+        // Lingerie & Modesty / Sexual items
         "bra", "bras", "brassiere", "panty", "panties", "underwear", "undies", "undergarment",
-        "lingerie", "thong", "thongs", "gstring", "g_string", "corset", "nighty", "nightie",
-        "babydoll", "bodysuit", "monokini", "bikini", "swimsuit", "swimwear", "beachwear",
+        "lingerie", "thong", "thongs", "gstring", "corset", "nighty", "nightie",
+        "babydoll", "bodysuit", "monokini", "bikini", "swimsuit", "swimwear",
         // Revealing Clothes & Body Exposure (Bangladeshi / Islamic context)
-        "cleavage", "navel", "belly", "waist", "midriff", "thigh", "thighs", "barelegs",
-        "bare_legs", "mini_skirt", "miniskirt", "crop_top", "croptop", "hotpants", "hot_pants",
-        "short_dress", "exposed", "topless", "bottomless", "saree_hot", "blouse_hot",
-        "hot_saree", "hot_blouse", "sari_hot", "open_blouse", "deep_neck", "deepneck",
-        "low_cut", "lowcut", "backless", "sleeveless_hot",
+        "cleavage", "navel", "midriff", "barelegs", "miniskirt", "croptop", "hotpants",
+        "topless", "bottomless", "deepneck", "lowcut", "backless",
         // Sexual posts, postures & social media
-        "sexy_post", "hot_post", "sex_post", "erotic_post", "sexy_girl", "hot_girl",
-        "hot_model", "sexy_model", "sexy_babe", "hot_babe", "curvy_girl", "curvy_model",
-        "voluptuous", "seductive", "provocative", "bed_scene", "bedroom", "kiss", "kissing",
-        "lipkiss", "lip_kiss", "intimate", "intimacy", "romance_hot", "hot_romance",
-        "twerk", "twerking", "booty", "butt", "ass_pic", "boobies", "sideboob", "underboob",
-        "nude_pic", "naked", "erotica", "hot_meme", "meme_hot",
+        "twerk", "twerking", "sideboob", "underboob", "naked", "erotica",
         // Desi / Bengali / Hindi transliterations
-        "bhabhi", "bhabhi_hot", "boudi", "boudi_hot", "choti", "bangla_choti", "magi",
-        "khanki", "choda", "chodi", "chudi", "chudai", "chodachodi", "gopon", "dudh", "gud",
-        "nengta", "nangla", "langta", "mal", "viral_hot", "tiktok_hot", "reels_hot",
-        "desisex", "banglasex", "desi_hot", "actress_hot", "kolkata_hot", "dhaka_hot",
-        "bd_hot", "callgirl", "escort", "savita", "sunny", "mia", "khalifa", "kamasutra",
-        "actress", "aunty", "room_video", "hotel_video",
-        // Major adult sites & studios
+        "bhabhi", "boudi", "choti", "magi", "khanki", "choda", "chodi", "chudi", "chudai",
+        "chodachodi", "gopon", "dudh", "gud", "nengta", "nangla", "langta", "callgirl", "escort",
+        "savita", "khalifa", "kamasutra",
+        // Major adult sites & studios (can also match in domain/URL/filename)
         "xhamster", "xvideos", "xnxx", "brazzers", "pornhub", "redtube", "youporn",
         "spankbang", "eporner", "beeg", "tubegalore", "chaturbate", "stripchat", "bangbros",
         "naughtyamerica", "evilangel", "realitykings", "twistys"
@@ -80,6 +77,7 @@ object AdultMediaDetector {
 
     /**
      * Checks whether a file is sexually explicit or adult content.
+     * Prevents false-positive deletion of downloaded movies, TV shows, and video projects.
      */
     fun isExplicit(file: File): Boolean {
         if (!file.exists() || !file.isFile || file.length() <= 0) return false
@@ -91,21 +89,49 @@ object AdultMediaDetector {
                       pathLower.contains("/recycle") || nameLower.startsWith(".trash") ||
                       nameLower.startsWith(".trashed")
 
-        // ── Tier 1: Fast Name / Path Keyword Check ────────────────────────────
-        for (keyword in ADULT_KEYWORDS) {
-            if (nameLower.contains(keyword) || pathLower.contains("/$keyword") ||
-                pathLower.contains("_$keyword") || pathLower.contains("-$keyword")) {
-                Log.w(TAG, "Tier 1 Triggered: File '${file.name}' matches adult keyword '$keyword'")
+        // ── Tier 1: Token-based Keyword Matching (Eliminates collisions like Jurassic, Animal, Classic) ─
+        val tokens = nameLower.split(Regex("[^a-z0-9]+")).filter { it.isNotEmpty() }.toSet()
+        val pathTokens = pathLower.split(Regex("[^a-z0-9]+")).filter { it.isNotEmpty() }.toSet()
+
+        for (keyword in ADULT_EXACT_TOKENS) {
+            if (tokens.contains(keyword) || pathTokens.contains(keyword)) {
+                Log.w(TAG, "Tier 1 Triggered: File '${file.name}' matches explicit token '$keyword'")
                 return true
             }
         }
 
-        // ── Tier 2: Multi-Color Space (YCbCr + HSV + RGB) Regional Classifier ─
+        // Direct check for adult domain substrings in path or name (e.g. "pornhub", "xvideos", "xnxx", "xhamster")
+        val adultDomains = listOf("pornhub", "xvideos", "xnxx", "xhamster", "brazzers", "redtube", "youporn", "hentai")
+        for (domain in adultDomains) {
+            if (nameLower.contains(domain) || pathLower.contains(domain)) {
+                Log.w(TAG, "Tier 1 Triggered: File '${file.name}' matches explicit studio '$domain'")
+                return true
+            }
+        }
+
+        // ── Movie Protection Shield: Never delete feature-length films or movies by visual heuristics ──
         val ext = file.extension.lowercase(Locale.ROOT)
+        val isVideo = ext in VIDEO_EXTENSIONS
+
+        if (isVideo) {
+            val fileSizeBytes = file.length()
+            val isMovieDirectory = pathLower.contains("/movies/") || pathLower.contains("/movie/") ||
+                                   pathLower.contains("/film/") || pathLower.contains("/films/")
+            val hasMovieReleaseTag = tokens.any { it in MOVIE_RELEASE_TAGS }
+
+            // Videos > 70 MB or containing release tags / in Movies folder are full-length movies / shows.
+            // Do NOT apply crude skin tone heuristics to full-length films!
+            if (fileSizeBytes > 70 * 1024 * 1024L || isMovieDirectory || hasMovieReleaseTag) {
+                Log.i(TAG, "Movie Protection: Skipping visual skin check for full-length video '${file.name}' (${fileSizeBytes / (1024 * 1024)}MB)")
+                return false
+            }
+        }
+
+        // ── Tier 2: Multi-Color Space (YCbCr + HSV + RGB) Regional Classifier (Short clips / Images only) ─
         return try {
             when {
                 ext in IMAGE_EXTENSIONS -> analyzeImage(file, isTrash)
-                ext in VIDEO_EXTENSIONS -> analyzeVideo(file, isTrash)
+                isVideo -> analyzeVideo(file, isTrash)
                 else -> false
             }
         } catch (e: Exception) {
@@ -166,6 +192,12 @@ object AdultMediaDetector {
             val durationMs = durationStr?.toLongOrNull() ?: 10_000L
             val durationUs = durationMs * 1000L
 
+            // Feature-Length Film Guard: If video is > 15 minutes, never delete it via visual skin analysis!
+            if (durationMs > 15 * 60 * 1000L) {
+                Log.i(TAG, "Movie Protection: Video '${file.name}' is ${durationMs / 60000} mins long. Skipping visual heuristics.")
+                return false
+            }
+
             // Sample 5 distinct checkpoints across the video: 10%, 25%, 50%, 75%, 90%
             val checkpoints = if (durationUs > 3_000_000L) {
                 listOf(
@@ -191,17 +223,14 @@ object AdultMediaDetector {
 
                 if (isSkinExcessive(zones, isTrash)) {
                     skinTriggerCount++
-                    if (zones.globalRatio >= 0.25f || zones.centerRatio >= 0.30f || skinTriggerCount >= 2) {
-                        Log.w(TAG, "Tier 2 Video Trigger: Positive frame at ${timeUs / 1000}ms for '${file.name}'")
+                    // Require at least 3 distinct positive checkpoints with massive skin exposure
+                    if (skinTriggerCount >= 3) {
+                        Log.w(TAG, "Tier 2 Video Trigger: Multi-frame explicit content verified for '${file.name}'")
                         return true
                     }
                 }
             }
-            val triggered = skinTriggerCount > 0 && isTrash
-            if (triggered) {
-                Log.w(TAG, "Tier 2 Trash Video Triggered: Checkpoints positive for '${file.name}'")
-            }
-            triggered
+            false
         } catch (e: Exception) {
             Log.w(TAG, "Error analyzing video ${file.name}: ${e.message}")
             false
@@ -348,24 +377,20 @@ object AdultMediaDetector {
     private fun isSkinExcessive(z: SkinZoneResult, isTrash: Boolean): Boolean {
         return if (isTrash) {
             z.globalRatio >= TRASH_SKIN_THRESHOLD ||
-            z.centerRatio >= 0.04f ||
-            z.upperCenterRatio >= 0.04f ||
-            z.cleavageRatio >= 0.04f ||
-            z.midriffRatio >= 0.04f ||
-            z.lowerCenterRatio >= 0.04f ||
-            z.lowerBodyRatio >= 0.04f ||
-            z.torsoRatio >= 0.04f ||
-            z.maxQuadrantRatio >= 0.05f
+            z.centerRatio >= 0.35f ||
+            z.upperCenterRatio >= 0.30f ||
+            z.cleavageRatio >= 0.30f ||
+            z.midriffRatio >= 0.30f ||
+            z.lowerCenterRatio >= 0.30f ||
+            z.lowerBodyRatio >= 0.35f ||
+            z.torsoRatio >= 0.35f ||
+            z.maxQuadrantRatio >= 0.40f
         } else {
-            z.globalRatio >= SKIN_THRESHOLD ||       // >= 0.055f (5.5%)
-            z.centerRatio >= 0.07f ||                // >= 7% center body
-            z.upperCenterRatio >= 0.06f ||           // >= 6% cleavage / bra / exposed shoulders
-            z.cleavageRatio >= 0.06f ||              // >= 6% deep-neck / cleavage
-            z.midriffRatio >= 0.06f ||               // >= 6% exposed navel / belly / saree blouse / bra gap
-            z.lowerCenterRatio >= 0.06f ||           // >= 6% panties / bikini bottom / thighs / buttocks
-            z.lowerBodyRatio >= 0.06f ||             // >= 6% bare legs / thighs
-            z.torsoRatio >= 0.06f ||                 // >= 6% monokini / lingerie / swimsuit
-            z.maxQuadrantRatio >= 0.09f              // >= 9% close-up cropped shots
+            // Require substantial explicit exposure (not just faces / hands / arms)
+            (z.globalRatio >= SKIN_THRESHOLD && (z.centerRatio >= 0.45f || z.torsoRatio >= 0.40f || z.lowerCenterRatio >= 0.40f)) ||
+            (z.centerRatio >= 0.55f && (z.torsoRatio >= 0.50f || z.lowerBodyRatio >= 0.50f)) ||
+            (z.cleavageRatio >= 0.50f && z.upperCenterRatio >= 0.45f && z.globalRatio >= 0.30f) ||
+            (z.lowerCenterRatio >= 0.50f && z.lowerBodyRatio >= 0.50f && z.globalRatio >= 0.30f)
         }
     }
 

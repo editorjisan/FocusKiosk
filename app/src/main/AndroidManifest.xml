@@ -224,5 +224,20 @@
             </intent-filter>
         </receiver>
 
+        <!-- SCHEDULED WORK / VIDEO UPLOAD WINDOW RECEIVER -->
+        <receiver
+            android:name=".policy.WorkWindowReceiver"
+            android:exported="true"
+            android:directBootAware="true">
+            <intent-filter>
+                <action android:name="com.focuskiosk.policy.ACTION_WORK_WINDOW_START" />
+                <action android:name="com.focuskiosk.policy.ACTION_WORK_WINDOW_END" />
+                <action android:name="android.intent.action.USER_PRESENT" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+                <action android:name="android.intent.action.SCREEN_ON" />
+            </intent-filter>
+        </receiver>
+
     </application>
 </manifest>

@@ -691,7 +691,7 @@
             android:orientation="horizontal"
             android:gravity="center_vertical"
             android:paddingTop="3dp"
-            android:paddingBottom="6dp">
+            android:paddingBottom="4dp">
 
             <TextView
                 android:layout_width="0dp"
@@ -710,6 +710,134 @@
                 app:trackTint="#007AFF" />
         </LinearLayout>
 
+        <!-- Scheduled Upload / Work Window Settings -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingTop="3dp"
+            android:paddingBottom="2dp">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Scheduled Upload Window"
+                    android:textColor="#FFFFFF"
+                    android:textSize="13sp" />
+
+                <TextView
+                    android:id="@+id/tvWorkWindowSummary"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Daily at 8:00 PM (1h)"
+                    android:textColor="#8E8E93"
+                    android:textSize="11sp" />
+            </LinearLayout>
+
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/switchWorkWindow"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:checked="true"
+                app:thumbTint="#FFFFFF"
+                app:trackTint="#007AFF" />
+        </LinearLayout>
+
+        <!-- Work Window Configuration Details -->
+        <LinearLayout
+            android:id="@+id/layoutWorkWindowConfig"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingBottom="6dp"
+            android:visibility="visible">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="4dp">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnIntervalDaily"
+                    style="@style/Widget.MaterialComponents.Button.UnelevatedButton"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:layout_height="30dp"
+                    android:text="Daily"
+                    android:textSize="10sp"
+                    android:textColor="#FFFFFF"
+                    android:layout_marginEnd="4dp"
+                    app:cornerRadius="15dp"
+                    android:backgroundTint="#007AFF" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnInterval2Days"
+                    style="@style/Widget.MaterialComponents.Button.UnelevatedButton"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:layout_height="30dp"
+                    android:text="2 Days"
+                    android:textSize="10sp"
+                    android:textColor="#FFFFFF"
+                    android:layout_marginEnd="4dp"
+                    app:cornerRadius="15dp"
+                    android:backgroundTint="#2C2C2E" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnInterval3Days"
+                    style="@style/Widget.MaterialComponents.Button.UnelevatedButton"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:layout_height="30dp"
+                    android:text="3 Days"
+                    android:textSize="10sp"
+                    android:textColor="#FFFFFF"
+                    app:cornerRadius="15dp"
+                    android:backgroundTint="#2C2C2E" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnPickWorkWindowTime"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:layout_height="32dp"
+                    android:text="Time: 8:00 PM"
+                    android:textSize="10sp"
+                    android:textColor="#007AFF"
+                    android:layout_marginEnd="4dp"
+                    app:strokeColor="#007AFF"
+                    app:cornerRadius="16dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnPickWorkWindowDuration"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:layout_height="32dp"
+                    android:text="Duration: 1h"
+                    android:textSize="10sp"
+                    android:textColor="#007AFF"
+                    app:strokeColor="#007AFF"
+                    app:cornerRadius="16dp" />
+            </LinearLayout>
+        </LinearLayout>
+
         <!-- Primary Action Button (Apple HIG Prominent Action Pill) -->
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnActivateLock"
@@ -724,6 +852,108 @@
             android:letterSpacing="0.01"
             app:cornerRadius="14dp"
             android:backgroundTint="#007AFF" />
+
+    </LinearLayout>
+
+    <!-- ── Apple Inset Active Lock Status Panel (shown when lock is active) ── -->
+    <LinearLayout
+        android:id="@+id/activeLockPanel"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:paddingStart="24dp"
+        android:paddingEnd="24dp"
+        android:paddingTop="16dp"
+        android:paddingBottom="16dp"
+        android:visibility="gone"
+        app:layout_constraintTop_toBottomOf="@id/otaUpdateCard"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <ImageView
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:src="@mipmap/ic_launcher"
+            android:contentDescription="Focus Lock Icon"
+            android:layout_marginBottom="12dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Focus Lock Active"
+            android:textColor="#FFFFFF"
+            android:textSize="20sp"
+            android:fontFamily="sans-serif-medium"
+            android:textStyle="bold"
+            android:layout_marginBottom="4dp" />
+
+        <TextView
+            android:id="@+id/tvActiveLockCountdown"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="--d --h --m --s"
+            android:textColor="#007AFF"
+            android:textSize="28sp"
+            android:fontFamily="sans-serif-medium"
+            android:textStyle="bold"
+            android:layout_marginBottom="4dp" />
+
+        <TextView
+            android:id="@+id/tvActiveLockTargetDate"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Unlocks at: ..."
+            android:textColor="#8E8E93"
+            android:textSize="13sp"
+            android:gravity="center"
+            android:layout_marginBottom="16dp" />
+
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:cardCornerRadius="14dp"
+            app:cardElevation="0dp"
+            app:strokeWidth="1dp"
+            app:strokeColor="#2C2C2E"
+            app:cardBackgroundColor="#1C1C1E"
+            android:layout_marginBottom="16dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="14dp">
+
+                <TextView
+                    android:id="@+id/tvActiveWorkWindowStatus"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Upload Window: Configured"
+                    android:textColor="#34C759"
+                    android:textSize="13sp"
+                    android:fontFamily="sans-serif-medium"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="4dp" />
+
+                <TextView
+                    android:id="@+id/tvActiveWorkWindowDetails"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Video upload apps unlock periodically for creators."
+                    android:textColor="#8E8E93"
+                    android:textSize="11sp" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Blocked apps and explicit adult media remain strictly protected until unlock time."
+            android:textColor="#636366"
+            android:textSize="12sp"
+            android:gravity="center" />
 
     </LinearLayout>
 

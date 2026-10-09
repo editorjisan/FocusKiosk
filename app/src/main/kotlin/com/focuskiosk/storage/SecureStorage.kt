@@ -34,6 +34,17 @@ object SecureStorage {
     const val KEY_VPN_ENABLED          = "vpn_enabled"
     const val KEY_FINANCIAL_PACKAGES   = "financial_packages"
     const val KEY_SETUP_COMPLETE       = "setup_complete"
+
+    // ── Scheduled Work / Video Upload Window Constants ──────────────────────
+    const val KEY_WORK_WINDOW_ENABLED       = "work_window_enabled"
+    const val KEY_WORK_WINDOW_INTERVAL_DAYS = "work_window_interval_days" // 1 = Daily, 2 = Every 2 Days, 3 = Every 3 Days
+    const val KEY_WORK_WINDOW_START_HOUR    = "work_window_start_hour"    // 0..23
+    const val KEY_WORK_WINDOW_START_MINUTE  = "work_window_start_minute"  // 0..59
+    const val KEY_WORK_WINDOW_DURATION_MINS = "work_window_duration_mins" // e.g. 60
+    const val KEY_WORK_WINDOW_PACKAGES      = "work_window_packages"      // Selected apps for upload window
+    const val KEY_WORK_WINDOW_ACTIVE        = "work_window_active"        // Currently inside unlocked window
+    const val KEY_NEXT_WINDOW_START_MS      = "next_window_start_ms"
+    const val KEY_NEXT_WINDOW_END_MS        = "next_window_end_ms"
     // ─────────────────────────────────────────────────────────────────────────
 
     @Volatile private var instance: SharedPreferences? = null
@@ -71,6 +82,12 @@ object SecureStorage {
 
     fun getBoolean(context: Context, key: String, default: Boolean = false): Boolean =
         getPrefs(context).getBoolean(key, default)
+
+    fun putInt(context: Context, key: String, value: Int) =
+        getPrefs(context).edit().putInt(key, value).apply()
+
+    fun getInt(context: Context, key: String, default: Int = 0): Int =
+        getPrefs(context).getInt(key, default)
 
     fun putString(context: Context, key: String, value: String) =
         getPrefs(context).edit().putString(key, value).apply()

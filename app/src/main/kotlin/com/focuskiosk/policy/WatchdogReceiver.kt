@@ -27,9 +27,11 @@ class WatchdogReceiver : BroadcastReceiver() {
             Intent.ACTION_BOOT_COMPLETED,
             "android.intent.action.LOCKED_BOOT_COMPLETED" -> {
                 KioskRestoreManager.checkAndRestoreIfExpired(context)
+                WorkWindowScheduler.checkAndSyncWindow(context)
             }
             else -> {
                 KioskRestoreManager.checkAndRestoreIfExpired(context)
+                WorkWindowScheduler.checkAndSyncWindow(context)
             }
         }
     }

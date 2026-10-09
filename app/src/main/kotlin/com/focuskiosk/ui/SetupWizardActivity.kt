@@ -54,6 +54,12 @@ class SetupWizardActivity : AppCompatActivity() {
     private lateinit var binding: ActivitySetupWizardBinding
     private lateinit var selectAdapter: AppSelectAdapter
 
+    private var selectedIntervalDays: Int = 1
+    private var selectedWorkWindowStartHour: Int = 20
+    private var selectedWorkWindowStartMinute: Int = 0
+    private var selectedWorkWindowDurationMins: Int = 60
+    private var activeCountdownJob: kotlinx.coroutines.Job? = null
+
     private val requestNotificationPermissionLauncher = registerForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
     ) { isGranted ->
@@ -121,6 +127,7 @@ class SetupWizardActivity : AppCompatActivity() {
         setupList()
         setupSearchBar()
         setupDurationControls()
+        setupWorkWindowControls()
         binding.btnActivateLock.setOnClickListener { confirmActivation() }
 
         binding.btnCheckUpdate.setOnClickListener { triggerUpdateFlow() }
@@ -132,6 +139,7 @@ class SetupWizardActivity : AppCompatActivity() {
         }
 
         loadApps()
+        syncLockState()
 
         // Background silent check for updates on setup launch
         com.focuskiosk.updater.SilentUpdateManager.triggerImmediateCheck(this)
@@ -147,22 +155,12 @@ class SetupWizardActivity : AppCompatActivity() {
         PolicyEnforcer.unblockAppInstalls(this)
         PolicyEnforcer.unrestrictSettingsSilently(this)
 
-        val deviceContext = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            createDeviceProtectedStorageContext()
-        } else {
-            this
-        }
-        val sp = deviceContext.getSharedPreferences("focus_kiosk_prefs", android.content.Context.MODE_PRIVATE)
-        val epochTime = sp.getLong("unlock_epoch_time", 0L)
-        val secureTs = runCatching { SecureStorage.getUnlockTimestampMs(this) }.getOrDefault(0L)
-        val unlockEpoch = if (epochTime > 0L) epochTime else secureTs
-        val isLocked = sp.getBoolean("lock_active", false) || runCatching { SecureStorage.isLockActive(this) }.getOrDefault(false)
+        syncLockState()
+    }
 
-        if (isLocked && unlockEpoch in 1..System.currentTimeMillis()) {
-            Log.i("SetupWizard", "Unlock timestamp reached on resume ($unlockEpoch <= ${System.currentTimeMillis()}) — restoring apps immediately!")
-            KioskRestoreManager.restoreAllApps(this)
-            loadApps()
-        }
+    override fun onDestroy() {
+        super.onDestroy()
+        activeCountdownJob?.cancel()
     }
 
     private fun triggerUpdateFlow() {
@@ -471,6 +469,192 @@ class SetupWizardActivity : AppCompatActivity() {
         return totalMinutes * 60_000L
     }
 
+    // --  Work Window Controls  ------------------------------------------------
+
+    private fun setupWorkWindowControls() {
+        selectedIntervalDays = SecureStorage.getInt(this, SecureStorage.KEY_WORK_WINDOW_INTERVAL_DAYS, 1).coerceIn(1, 3)
+        selectedWorkWindowStartHour = SecureStorage.getInt(this, SecureStorage.KEY_WORK_WINDOW_START_HOUR, 20)
+        selectedWorkWindowStartMinute = SecureStorage.getInt(this, SecureStorage.KEY_WORK_WINDOW_START_MINUTE, 0)
+        selectedWorkWindowDurationMins = SecureStorage.getInt(this, SecureStorage.KEY_WORK_WINDOW_DURATION_MINS, 60)
+        val isEnabled = SecureStorage.getBoolean(this, SecureStorage.KEY_WORK_WINDOW_ENABLED, true)
+
+        binding.switchWorkWindow.isChecked = isEnabled
+        binding.layoutWorkWindowConfig.visibility = if (isEnabled) View.VISIBLE else View.GONE
+
+        binding.switchWorkWindow.setOnCheckedChangeListener { _, isChecked ->
+            binding.layoutWorkWindowConfig.visibility = if (isChecked) View.VISIBLE else View.GONE
+            updateWorkWindowSummary()
+        }
+
+        updateIntervalButtons()
+
+        binding.btnIntervalDaily.setOnClickListener {
+            selectedIntervalDays = 1
+            updateIntervalButtons()
+            updateWorkWindowSummary()
+        }
+        binding.btnInterval2Days.setOnClickListener {
+            selectedIntervalDays = 2
+            updateIntervalButtons()
+            updateWorkWindowSummary()
+        }
+        binding.btnInterval3Days.setOnClickListener {
+            selectedIntervalDays = 3
+            updateIntervalButtons()
+            updateWorkWindowSummary()
+        }
+
+        binding.btnPickWorkWindowTime.setOnClickListener {
+            val tpd = android.app.TimePickerDialog(
+                this,
+                { _, hourOfDay, minute ->
+                    selectedWorkWindowStartHour = hourOfDay
+                    selectedWorkWindowStartMinute = minute
+                    updateWorkWindowSummary()
+                },
+                selectedWorkWindowStartHour,
+                selectedWorkWindowStartMinute,
+                false
+            )
+            tpd.show()
+        }
+
+        binding.btnPickWorkWindowDuration.setOnClickListener {
+            selectedWorkWindowDurationMins = when (selectedWorkWindowDurationMins) {
+                30 -> 60
+                60 -> 120
+                120 -> 180
+                else -> 30
+            }
+            updateWorkWindowSummary()
+        }
+
+        updateWorkWindowSummary()
+    }
+
+    private fun updateIntervalButtons() {
+        val selectedColor = android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#007AFF"))
+        val defaultColor = android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#2C2C2E"))
+
+        binding.btnIntervalDaily.backgroundTintList = if (selectedIntervalDays == 1) selectedColor else defaultColor
+        binding.btnInterval2Days.backgroundTintList = if (selectedIntervalDays == 2) selectedColor else defaultColor
+        binding.btnInterval3Days.backgroundTintList = if (selectedIntervalDays == 3) selectedColor else defaultColor
+    }
+
+    private fun updateWorkWindowSummary() {
+        val amPm = if (selectedWorkWindowStartHour >= 12) "PM" else "AM"
+        val hour12 = if (selectedWorkWindowStartHour % 12 == 0) 12 else selectedWorkWindowStartHour % 12
+        val timeStr = String.format(Locale.getDefault(), "%d:%02d %s", hour12, selectedWorkWindowStartMinute, amPm)
+        binding.btnPickWorkWindowTime.text = "Time: $timeStr"
+
+        val durationStr = if (selectedWorkWindowDurationMins < 60) "${selectedWorkWindowDurationMins}m" else "${selectedWorkWindowDurationMins / 60}h"
+        binding.btnPickWorkWindowDuration.text = "Duration: $durationStr"
+
+        val intervalStr = when (selectedIntervalDays) {
+            1 -> "Daily"
+            2 -> "Every 2 days"
+            3 -> "Every 3 days"
+            else -> "Every $selectedIntervalDays days"
+        }
+        val summaryText = "$intervalStr at $timeStr ($durationStr)"
+        binding.tvWorkWindowSummary.text = summaryText
+    }
+
+    // --  Lock State Sync & Countdown  -----------------------------------------
+
+    private fun syncLockState() {
+        val deviceContext = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            createDeviceProtectedStorageContext()
+        } else {
+            this
+        }
+        val sp = deviceContext.getSharedPreferences("focus_kiosk_prefs", Context.MODE_PRIVATE)
+        val epochTime = sp.getLong("unlock_epoch_time", 0L)
+        val secureTs = runCatching { SecureStorage.getUnlockTimestampMs(this) }.getOrDefault(0L)
+        val unlockEpoch = if (epochTime > 0L) epochTime else secureTs
+        val isLocked = sp.getBoolean("lock_active", false) || runCatching { SecureStorage.isLockActive(this) }.getOrDefault(false)
+
+        val now = System.currentTimeMillis()
+        if (isLocked && unlockEpoch in 1..now) {
+            Log.i("SetupWizard", "Unlock timestamp reached ($unlockEpoch <= $now) — restoring apps immediately!")
+            activeCountdownJob?.cancel()
+            KioskRestoreManager.restoreAllApps(this)
+            showSetupMode()
+            loadApps()
+        } else if (isLocked && unlockEpoch > now) {
+            showActiveLockMode(unlockEpoch)
+        } else {
+            showSetupMode()
+        }
+    }
+
+    private fun showActiveLockMode(unlockEpoch: Long) {
+        binding.activeLockPanel.visibility = View.VISIBLE
+        binding.searchRowLayout.visibility = View.GONE
+        binding.rvSelectApps.visibility = View.GONE
+        binding.controlsPanel.visibility = View.GONE
+        binding.tvNoAppsFound.visibility = View.GONE
+
+        val timeFormat = SimpleDateFormat("EEEE, MMM d 'at' h:mm a", Locale.getDefault())
+        binding.tvActiveLockTargetDate.text = "Unlocks: ${timeFormat.format(Date(unlockEpoch))}"
+
+        val isWorkWindowEnabled = SecureStorage.getBoolean(this, SecureStorage.KEY_WORK_WINDOW_ENABLED, false)
+        if (isWorkWindowEnabled) {
+            val isWindowActive = com.focuskiosk.policy.WorkWindowScheduler.isWindowActive(this)
+            val intervalDays = SecureStorage.getInt(this, SecureStorage.KEY_WORK_WINDOW_INTERVAL_DAYS, 1)
+            val startHour = SecureStorage.getInt(this, SecureStorage.KEY_WORK_WINDOW_START_HOUR, 20)
+            val startMinute = SecureStorage.getInt(this, SecureStorage.KEY_WORK_WINDOW_START_MINUTE, 0)
+            val durationMins = SecureStorage.getInt(this, SecureStorage.KEY_WORK_WINDOW_DURATION_MINS, 60)
+            val amPm = if (startHour >= 12) "PM" else "AM"
+            val hour12 = if (startHour % 12 == 0) 12 else startHour % 12
+            val timeStr = String.format(Locale.getDefault(), "%d:%02d %s", hour12, startMinute, amPm)
+            val intervalStr = if (intervalDays == 1) "Daily" else "Every $intervalDays days"
+
+            if (isWindowActive) {
+                binding.tvActiveWorkWindowStatus.text = "Upload Window: Active Now 🟢"
+                binding.tvActiveWorkWindowStatus.setTextColor(Color.parseColor("#34C759"))
+                binding.tvActiveWorkWindowDetails.text = "Creator apps are currently unlocked for video upload."
+            } else {
+                binding.tvActiveWorkWindowStatus.text = "Upload Window: Scheduled ⏱️"
+                binding.tvActiveWorkWindowStatus.setTextColor(Color.parseColor("#007AFF"))
+                binding.tvActiveWorkWindowDetails.text = "$intervalStr at $timeStr ($durationMins mins) apps unlock automatically."
+            }
+        } else {
+            binding.tvActiveWorkWindowStatus.text = "Upload Window: Disabled"
+            binding.tvActiveWorkWindowStatus.setTextColor(Color.parseColor("#8E8E93"))
+            binding.tvActiveWorkWindowDetails.text = "No periodic upload windows configured."
+        }
+
+        activeCountdownJob?.cancel()
+        activeCountdownJob = lifecycleScope.launch {
+            while (true) {
+                val remainingMs = unlockEpoch - System.currentTimeMillis()
+                if (remainingMs <= 0L) {
+                    binding.tvActiveLockCountdown.text = "00d 00h 00m 00s"
+                    delay(500L)
+                    KioskRestoreManager.restoreAllApps(this@SetupWizardActivity)
+                    showSetupMode()
+                    loadApps()
+                    break
+                }
+                val days = remainingMs / (24L * 3600_000L)
+                val hours = (remainingMs % (24L * 3600_000L)) / 3600_000L
+                val minutes = (remainingMs % 3600_000L) / 60_000L
+                val seconds = (remainingMs % 60_000L) / 1000L
+                binding.tvActiveLockCountdown.text = String.format(Locale.US, "%02dd %02dh %02dm %02ds", days, hours, minutes, seconds)
+                delay(1000L)
+            }
+        }
+    }
+
+    private fun showSetupMode() {
+        binding.activeLockPanel.visibility = View.GONE
+        binding.searchRowLayout.visibility = View.VISIBLE
+        binding.rvSelectApps.visibility = View.VISIBLE
+        binding.controlsPanel.visibility = View.VISIBLE
+        binding.btnActivateLock.isEnabled = true
+    }
+
     // --  Confirm & apply  ----------------------------------------------------
 
     private fun confirmActivation() {
@@ -490,11 +674,7 @@ class SetupWizardActivity : AppCompatActivity() {
         val unlockTs = System.currentTimeMillis() + durationMs
         val previewText = binding.tvDurationPreview.text.toString()
 
-        if (!com.focuskiosk.service.FocusAccessibilityService.isEnabled(this)) {
-            showAppleEscapeGuardDialog(whitelist, unlockTs, previewText)
-            return
-        }
-
+        // Directly show Apple confirmation dialog without blocking on accessibility service
         showAppleLockConfirmDialog(whitelist, unlockTs, previewText)
     }
 
@@ -571,6 +751,14 @@ class SetupWizardActivity : AppCompatActivity() {
         SecureStorage.putBoolean(this, SecureStorage.KEY_BLOCK_USB_DEBUGGING,
             binding.switchUsbDebugging.isChecked)
 
+        // Persist work window settings
+        val workWindowEnabled = binding.switchWorkWindow.isChecked
+        SecureStorage.putBoolean(this, SecureStorage.KEY_WORK_WINDOW_ENABLED, workWindowEnabled)
+        SecureStorage.putInt(this, SecureStorage.KEY_WORK_WINDOW_INTERVAL_DAYS, selectedIntervalDays)
+        SecureStorage.putInt(this, SecureStorage.KEY_WORK_WINDOW_START_HOUR, selectedWorkWindowStartHour)
+        SecureStorage.putInt(this, SecureStorage.KEY_WORK_WINDOW_START_MINUTE, selectedWorkWindowStartMinute)
+        SecureStorage.putInt(this, SecureStorage.KEY_WORK_WINDOW_DURATION_MINS, selectedWorkWindowDurationMins)
+
         // Save directly to unencrypted SharedPreferences for instant access by Watchdog & AlarmManager
         getSharedPreferences("focus_kiosk_prefs", android.content.Context.MODE_PRIVATE).edit()
             .putLong("unlock_epoch_time", unlockTs)
@@ -596,6 +784,10 @@ class SetupWizardActivity : AppCompatActivity() {
                 com.focuskiosk.service.FocusCountdownService.start(this@SetupWizardActivity, unlockTs)
                 // Schedule dual fail-safe (AlarmManager + WorkManager) for exact unlock restoration
                 com.focuskiosk.policy.KioskRestoreManager.scheduleFailSafe(this@SetupWizardActivity, unlockTs)
+                // Schedule work / upload window if enabled
+                if (workWindowEnabled) {
+                    com.focuskiosk.policy.WorkWindowScheduler.scheduleNextWindow(this@SetupWizardActivity)
+                }
             } catch (e: Exception) {
                 Log.e("SetupWizard", "Error activating focus lock", e)
             }
@@ -603,17 +795,8 @@ class SetupWizardActivity : AppCompatActivity() {
             withContext(Dispatchers.Main) {
                 SecureStorage.setSetupCompleted(this@SetupWizardActivity, true)
 
-                // Self-hide FocusKiosk itself from launcher and app drawer during lock
-                try {
-                    packageManager.setComponentEnabledSetting(
-                        android.content.ComponentName(this@SetupWizardActivity, SetupWizardActivity::class.java),
-                        PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
-                        PackageManager.DONT_KILL_APP
-                    )
-                    Log.i("SetupWizard", "SetupWizardActivity disabled to self-hide during lock.")
-                } catch (e: Exception) {
-                    Log.e("SetupWizard", "Failed to disable component state", e)
-                }
+                // NOTE: We deliberately DO NOT disable SetupWizardActivity component.
+                // Keeping the component enabled ensures the app icon is never removed from the phone!
 
                 // Return user to the native stock home launcher
                 val homeIntent = Intent(Intent.ACTION_MAIN).apply {
@@ -621,7 +804,7 @@ class SetupWizardActivity : AppCompatActivity() {
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK
                 }
                 startActivity(homeIntent)
-                finishAffinity()
+                syncLockState()
             }
         }
     }
