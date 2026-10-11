@@ -47,6 +47,16 @@ object SecureStorage {
     const val KEY_NEXT_WINDOW_END_MS        = "next_window_end_ms"
     // ─────────────────────────────────────────────────────────────────────────
 
+    // ── Extreme Wake-up Alarm Constants ──────────────────────────────────────
+    const val KEY_ALARM_ENABLED            = "alarm_enabled"
+    const val KEY_ALARM_HOUR               = "alarm_hour"               // 0..23, default 6
+    const val KEY_ALARM_MINUTE             = "alarm_minute"             // 0..59, default 30
+    const val KEY_ALARM_USER_ID            = "alarm_user_id"            // default "jisan"
+    const val KEY_ALARM_PASSWORD           = "alarm_password"           // default "1234"
+    const val KEY_NEXT_ALARM_TIMESTAMP_MS  = "next_alarm_timestamp_ms"
+    const val KEY_ALARM_RINGING            = "alarm_ringing"
+    // ─────────────────────────────────────────────────────────────────────────
+
     @Volatile private var instance: SharedPreferences? = null
 
     private fun getPrefs(context: Context): SharedPreferences =

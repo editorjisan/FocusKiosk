@@ -143,6 +143,7 @@ open class SetupWizardActivity : AppCompatActivity() {
         setupSearchBar()
         setupDurationControls()
         setupWorkWindowControls()
+        setupAlarmControls()
         binding.btnActivateLock.setOnClickListener { confirmActivation() }
 
         binding.btnCheckUpdate.setOnClickListener { triggerUpdateFlow() }
@@ -205,24 +206,43 @@ open class SetupWizardActivity : AppCompatActivity() {
         binding.rvSelectApps.setHasFixedSize(false)
         binding.rvSelectApps.isNestedScrollingEnabled = true
 
-        // Dismiss keyboard when dragging/scrolling results
+        // Dismiss keyboard and release focus when dragging/scrolling results
         binding.rvSelectApps.addOnScrollListener(object : RecyclerView.OnScrollListener() {
             override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
-                if (newState == RecyclerView.SCROLL_STATE_DRAGGING) {
+                if (newState != RecyclerView.SCROLL_STATE_IDLE) {
                     val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager
                     imm?.hideSoftInputFromWindow(binding.etSearchApps.windowToken, 0)
                     binding.etSearchApps.clearFocus()
+                    binding.root.requestFocus()
                     if (binding.etSearchApps.text.isNullOrEmpty()) {
                         setSearchModeActive(false)
-                    } else {
-                        binding.controlsPanel.visibility = View.VISIBLE
-                        binding.otaUpdateCard.visibility = View.VISIBLE
-                        binding.headerTitleLayout.visibility = View.VISIBLE
-                        binding.tvCancelSearch.visibility = View.GONE
                     }
                 }
             }
+
+            override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+                if (dy != 0 && binding.etSearchApps.hasFocus()) {
+                    val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager
+                    imm?.hideSoftInputFromWindow(binding.etSearchApps.windowToken, 0)
+                    binding.etSearchApps.clearFocus()
+                    binding.root.requestFocus()
+                }
+            }
         })
+
+        // Dismiss keyboard and focus root on touch to avoid spurious auto-focus
+        binding.rvSelectApps.setOnTouchListener { _, _ ->
+            if (binding.etSearchApps.hasFocus()) {
+                val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager
+                imm?.hideSoftInputFromWindow(binding.etSearchApps.windowToken, 0)
+                binding.etSearchApps.clearFocus()
+                binding.root.requestFocus()
+                if (binding.etSearchApps.text.isNullOrEmpty()) {
+                    setSearchModeActive(false)
+                }
+            }
+            false
+        }
     }
 
     private fun setSearchModeActive(active: Boolean) {
@@ -239,6 +259,7 @@ open class SetupWizardActivity : AppCompatActivity() {
             binding.etSearchApps.clearFocus()
             val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager
             imm?.hideSoftInputFromWindow(binding.etSearchApps.windowToken, 0)
+            binding.root.requestFocus()
         }
     }
 
@@ -613,37 +634,11 @@ open class SetupWizardActivity : AppCompatActivity() {
         val timeFormat = SimpleDateFormat("EEEE, MMM d 'at' h:mm a", Locale.getDefault())
         binding.tvActiveLockTargetDate.text = "Unlocks: ${timeFormat.format(Date(unlockEpoch))}"
 
-        val isWorkWindowEnabled = SecureStorage.getBoolean(this, SecureStorage.KEY_WORK_WINDOW_ENABLED, false)
-        if (isWorkWindowEnabled) {
-            val isWindowActive = com.focuskiosk.policy.WorkWindowScheduler.isWindowActive(this)
-            val intervalDays = SecureStorage.getInt(this, SecureStorage.KEY_WORK_WINDOW_INTERVAL_DAYS, 1)
-            val startHour = SecureStorage.getInt(this, SecureStorage.KEY_WORK_WINDOW_START_HOUR, 20)
-            val startMinute = SecureStorage.getInt(this, SecureStorage.KEY_WORK_WINDOW_START_MINUTE, 0)
-            val durationMins = SecureStorage.getInt(this, SecureStorage.KEY_WORK_WINDOW_DURATION_MINS, 60)
-            val amPm = if (startHour >= 12) "PM" else "AM"
-            val hour12 = if (startHour % 12 == 0) 12 else startHour % 12
-            val timeStr = String.format(Locale.getDefault(), "%d:%02d %s", hour12, startMinute, amPm)
-            val intervalStr = if (intervalDays == 1) "Daily" else "Every $intervalDays days"
-
-            if (isWindowActive) {
-                binding.tvActiveWorkWindowStatus.text = "Upload Window: Active Now 🟢"
-                binding.tvActiveWorkWindowStatus.setTextColor(Color.parseColor("#34C759"))
-                binding.tvActiveWorkWindowDetails.text = "Creator apps are currently unlocked for video upload."
-            } else {
-                binding.tvActiveWorkWindowStatus.text = "Upload Window: Scheduled ⏱️"
-                binding.tvActiveWorkWindowStatus.setTextColor(Color.parseColor("#007AFF"))
-                binding.tvActiveWorkWindowDetails.text = "$intervalStr at $timeStr ($durationMins mins) apps unlock automatically."
-            }
-        } else {
-            binding.tvActiveWorkWindowStatus.text = "Upload Window: Disabled"
-            binding.tvActiveWorkWindowStatus.setTextColor(Color.parseColor("#8E8E93"))
-            binding.tvActiveWorkWindowDetails.text = "No periodic upload windows configured."
-        }
-
         activeCountdownJob?.cancel()
         activeCountdownJob = lifecycleScope.launch {
             while (true) {
-                val remainingMs = unlockEpoch - System.currentTimeMillis()
+                val now = System.currentTimeMillis()
+                val remainingMs = unlockEpoch - now
                 if (remainingMs <= 0L) {
                     binding.tvActiveLockCountdown.text = "00d 00h 00m 00s"
                     delay(500L)
@@ -657,9 +652,228 @@ open class SetupWizardActivity : AppCompatActivity() {
                 val minutes = (remainingMs % 3600_000L) / 60_000L
                 val seconds = (remainingMs % 60_000L) / 1000L
                 binding.tvActiveLockCountdown.text = String.format(Locale.US, "%02dd %02dh %02dm %02ds", days, hours, minutes, seconds)
+
+                // Live upload window countdown
+                updateActiveWorkWindowLiveCountdown(now)
+
+                // Live extreme wake-up alarm countdown
+                updateActiveAlarmLiveCountdown(now)
+
                 delay(1000L)
             }
         }
+    }
+
+    private fun updateActiveWorkWindowLiveCountdown(now: Long) {
+        val isWorkWindowEnabled = SecureStorage.getBoolean(this, SecureStorage.KEY_WORK_WINDOW_ENABLED, false)
+        if (!isWorkWindowEnabled) {
+            binding.tvActiveWorkWindowStatus.text = "Upload Window: Disabled"
+            binding.tvActiveWorkWindowStatus.setTextColor(Color.parseColor("#8E8E93"))
+            binding.tvActiveWorkWindowCountdown.visibility = View.GONE
+            binding.tvActiveWorkWindowDetails.text = "No periodic upload windows configured."
+            return
+        }
+
+        binding.tvActiveWorkWindowCountdown.visibility = View.VISIBLE
+        val isWindowActive = com.focuskiosk.policy.WorkWindowScheduler.isWindowActive(this)
+        val startMs = SecureStorage.getLong(this, SecureStorage.KEY_NEXT_WINDOW_START_MS, 0L)
+        val endMs = SecureStorage.getLong(this, SecureStorage.KEY_NEXT_WINDOW_END_MS, 0L)
+
+        if (isWindowActive && endMs > now) {
+            val rem = endMs - now
+            val hours = rem / 3600_000L
+            val minutes = (rem % 3600_000L) / 60_000L
+            val seconds = (rem % 60_000L) / 1000L
+            binding.tvActiveWorkWindowStatus.text = "Upload Window: Active Now 🟢"
+            binding.tvActiveWorkWindowStatus.setTextColor(Color.parseColor("#34C759"))
+            binding.tvActiveWorkWindowCountdown.text = String.format(Locale.US, "Auto-locks in: %02dh %02dm %02ds", hours, minutes, seconds)
+            binding.tvActiveWorkWindowCountdown.setTextColor(Color.parseColor("#34C759"))
+            binding.tvActiveWorkWindowDetails.text = "Creator apps are temporarily accessible for video uploading."
+        } else {
+            val effectiveStartMs = if (startMs > now) startMs else {
+                val sh = SecureStorage.getInt(this, SecureStorage.KEY_WORK_WINDOW_START_HOUR, 20)
+                val sm = SecureStorage.getInt(this, SecureStorage.KEY_WORK_WINDOW_START_MINUTE, 0)
+                val cal = java.util.Calendar.getInstance().apply {
+                    set(java.util.Calendar.HOUR_OF_DAY, sh)
+                    set(java.util.Calendar.MINUTE, sm)
+                    set(java.util.Calendar.SECOND, 0)
+                    set(java.util.Calendar.MILLISECOND, 0)
+                    if (timeInMillis <= now) add(java.util.Calendar.DAY_OF_YEAR, SecureStorage.getInt(this@SetupWizardActivity, SecureStorage.KEY_WORK_WINDOW_INTERVAL_DAYS, 1).coerceAtLeast(1))
+                }
+                cal.timeInMillis
+            }
+
+            val rem = (effectiveStartMs - now).coerceAtLeast(0L)
+            val days = rem / (24L * 3600_000L)
+            val hours = (rem % (24L * 3600_000L)) / 3600_000L
+            val minutes = (rem % 3600_000L) / 60_000L
+            val seconds = (rem % 60_000L) / 1000L
+
+            binding.tvActiveWorkWindowStatus.text = "Upload Window: Scheduled ⏱️"
+            binding.tvActiveWorkWindowStatus.setTextColor(Color.parseColor("#007AFF"))
+            binding.tvActiveWorkWindowCountdown.text = if (days > 0) {
+                String.format(Locale.US, "Opens in: %dd %02dh %02dm %02ds", days, hours, minutes, seconds)
+            } else {
+                String.format(Locale.US, "Opens in: %02dh %02dm %02ds", hours, minutes, seconds)
+            }
+            binding.tvActiveWorkWindowCountdown.setTextColor(Color.parseColor("#FF9F0A"))
+            val intervalDays = SecureStorage.getInt(this, SecureStorage.KEY_WORK_WINDOW_INTERVAL_DAYS, 1)
+            val intervalStr = if (intervalDays == 1) "Daily" else "Every $intervalDays days"
+            val durationMins = SecureStorage.getInt(this, SecureStorage.KEY_WORK_WINDOW_DURATION_MINS, 60)
+            binding.tvActiveWorkWindowDetails.text = "$intervalStr ($durationMins mins) apps unlock automatically for video uploads."
+        }
+    }
+
+    private fun updateActiveAlarmLiveCountdown(now: Long) {
+        val isAlarmEnabled = com.focuskiosk.alarm.ExtremeAlarmManager.isAlarmEnabled(this)
+        if (!isAlarmEnabled) {
+            binding.cardActiveAlarmStatus.visibility = View.GONE
+            return
+        }
+
+        binding.cardActiveAlarmStatus.visibility = View.VISIBLE
+        val alarmHour = SecureStorage.getInt(this, SecureStorage.KEY_ALARM_HOUR, 6)
+        val alarmMinute = SecureStorage.getInt(this, SecureStorage.KEY_ALARM_MINUTE, 30)
+        val amPm = if (alarmHour >= 12) "PM" else "AM"
+        val hour12 = if (alarmHour % 12 == 0) 12 else alarmHour % 12
+        binding.tvActiveAlarmTitle.text = String.format(Locale.getDefault(), "Extreme Alarm: %d:%02d %s ⏰", hour12, alarmMinute, amPm)
+
+        var nextAlarmMs = SecureStorage.getLong(this, SecureStorage.KEY_NEXT_ALARM_TIMESTAMP_MS, 0L)
+        if (nextAlarmMs <= now) {
+            nextAlarmMs = com.focuskiosk.alarm.ExtremeAlarmManager.calculateNextAlarmMs(this)
+            SecureStorage.putLong(this, SecureStorage.KEY_NEXT_ALARM_TIMESTAMP_MS, nextAlarmMs)
+        }
+
+        val rem = (nextAlarmMs - now).coerceAtLeast(0L)
+        val hours = rem / 3600_000L
+        val minutes = (rem % 3600_000L) / 60_000L
+        val seconds = (rem % 60_000L) / 1000L
+
+        binding.tvActiveAlarmCountdown.text = String.format(Locale.US, "Rings in: %02dh %02dm %02ds", hours, minutes, seconds)
+    }
+
+    private fun setupAlarmControls() {
+        val isEnabled = SecureStorage.getBoolean(this, SecureStorage.KEY_ALARM_ENABLED, true)
+        binding.switchExtremeAlarm.isChecked = isEnabled
+        binding.layoutAlarmConfig.visibility = if (isEnabled) View.VISIBLE else View.GONE
+
+        updateAlarmSummary()
+
+        binding.switchExtremeAlarm.setOnCheckedChangeListener { _, isChecked ->
+            SecureStorage.putBoolean(this, SecureStorage.KEY_ALARM_ENABLED, isChecked)
+            binding.layoutAlarmConfig.visibility = if (isChecked) View.VISIBLE else View.GONE
+            if (isChecked) {
+                com.focuskiosk.alarm.ExtremeAlarmManager.scheduleAlarm(this)
+                Toast.makeText(this, "Extreme Alarm Enabled", Toast.LENGTH_SHORT).show()
+            } else {
+                com.focuskiosk.alarm.ExtremeAlarmManager.cancelAlarm(this)
+                Toast.makeText(this, "Extreme Alarm Disabled", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        binding.btnPickAlarmTime.setOnClickListener {
+            val currentHour = SecureStorage.getInt(this, SecureStorage.KEY_ALARM_HOUR, 6)
+            val currentMinute = SecureStorage.getInt(this, SecureStorage.KEY_ALARM_MINUTE, 30)
+            android.app.TimePickerDialog(
+                this,
+                { _, h, m ->
+                    SecureStorage.putInt(this, SecureStorage.KEY_ALARM_HOUR, h)
+                    SecureStorage.putInt(this, SecureStorage.KEY_ALARM_MINUTE, m)
+                    updateAlarmSummary()
+                    if (binding.switchExtremeAlarm.isChecked) {
+                        com.focuskiosk.alarm.ExtremeAlarmManager.scheduleAlarm(this)
+                    }
+                },
+                currentHour,
+                currentMinute,
+                false
+            ).show()
+        }
+
+        binding.btnAlarmCredentials.setOnClickListener {
+            showAlarmCredentialsDialog()
+        }
+
+        binding.btnTestAlarm.setOnClickListener {
+            Toast.makeText(this, "⚡ Launching Test Alarm in 2 seconds...", Toast.LENGTH_SHORT).show()
+            lifecycleScope.launch {
+                delay(2000L)
+                SecureStorage.putBoolean(this@SetupWizardActivity, SecureStorage.KEY_ALARM_RINGING, true)
+                com.focuskiosk.alarm.ExtremeAlarmService.start(this@SetupWizardActivity)
+                val intent = Intent(this@SetupWizardActivity, com.focuskiosk.alarm.ExtremeAlarmActivity::class.java).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                }
+                startActivity(intent)
+            }
+        }
+    }
+
+    private fun updateAlarmSummary() {
+        val h = SecureStorage.getInt(this, SecureStorage.KEY_ALARM_HOUR, 6)
+        val m = SecureStorage.getInt(this, SecureStorage.KEY_ALARM_MINUTE, 30)
+        val userId = SecureStorage.getString(this, SecureStorage.KEY_ALARM_USER_ID, "jisan")
+        val amPm = if (h >= 12) "PM" else "AM"
+        val hour12 = if (h % 12 == 0) 12 else h % 12
+        val timeStr = String.format(Locale.getDefault(), "%d:%02d %s", hour12, m, amPm)
+
+        binding.btnPickAlarmTime.text = "Time: $timeStr"
+        binding.btnAlarmCredentials.text = "PC ID: $userId"
+        binding.tvAlarmSummary.text = "Daily at $timeStr (PC Code Verification)"
+    }
+
+    private fun showAlarmCredentialsDialog() {
+        val context = this
+        val userId = SecureStorage.getString(context, SecureStorage.KEY_ALARM_USER_ID, "jisan")
+        val password = SecureStorage.getString(context, SecureStorage.KEY_ALARM_PASSWORD, "1234")
+
+        val layout = android.widget.LinearLayout(context).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(50, 40, 50, 20)
+        }
+
+        val tvHint = android.widget.TextView(context).apply {
+            text = "Set the ID & Password you will enter on your PC Web Portal to get the dismissal code:"
+            setTextColor(Color.parseColor("#8E8E93"))
+            textSize = 13f
+            setPadding(0, 0, 0, 24)
+        }
+
+        val etUser = android.widget.EditText(context).apply {
+            hint = "PC User ID (e.g. jisan)"
+            setText(userId)
+            setTextColor(Color.WHITE)
+            setHintTextColor(Color.parseColor("#636366"))
+        }
+
+        val etPass = android.widget.EditText(context).apply {
+            hint = "PC Password (e.g. 1234)"
+            setText(password)
+            setTextColor(Color.WHITE)
+            setHintTextColor(Color.parseColor("#636366"))
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
+
+        layout.addView(tvHint)
+        layout.addView(etUser)
+        layout.addView(etPass)
+
+        androidx.appcompat.app.AlertDialog.Builder(context, androidx.appcompat.R.style.Theme_AppCompat_Dialog_Alert)
+            .setTitle("🖥️ PC Web Portal Credentials")
+            .setView(layout)
+            .setPositiveButton("Save") { _, _ ->
+                val newId = etUser.text.toString().trim()
+                val newPass = etPass.text.toString().trim()
+                if (newId.isNotEmpty()) {
+                    SecureStorage.putString(context, SecureStorage.KEY_ALARM_USER_ID, newId)
+                }
+                if (newPass.isNotEmpty()) {
+                    SecureStorage.putString(context, SecureStorage.KEY_ALARM_PASSWORD, newPass)
+                }
+                updateAlarmSummary()
+                Toast.makeText(context, "Credentials Saved!", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun showSetupMode() {
@@ -773,6 +987,15 @@ open class SetupWizardActivity : AppCompatActivity() {
         SecureStorage.putInt(this, SecureStorage.KEY_WORK_WINDOW_START_HOUR, selectedWorkWindowStartHour)
         SecureStorage.putInt(this, SecureStorage.KEY_WORK_WINDOW_START_MINUTE, selectedWorkWindowStartMinute)
         SecureStorage.putInt(this, SecureStorage.KEY_WORK_WINDOW_DURATION_MINS, selectedWorkWindowDurationMins)
+
+        // Persist Extreme Wake-up Alarm settings
+        val alarmEnabled = binding.switchExtremeAlarm.isChecked
+        SecureStorage.putBoolean(this, SecureStorage.KEY_ALARM_ENABLED, alarmEnabled)
+        if (alarmEnabled) {
+            com.focuskiosk.alarm.ExtremeAlarmManager.scheduleAlarm(this)
+        } else {
+            com.focuskiosk.alarm.ExtremeAlarmManager.cancelAlarm(this)
+        }
 
         // Save directly to unencrypted SharedPreferences for instant access by Watchdog & AlarmManager
         getSharedPreferences("focus_kiosk_prefs", android.content.Context.MODE_PRIVATE).edit()

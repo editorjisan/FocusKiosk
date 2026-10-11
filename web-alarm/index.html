@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Focus Kiosk | Extreme Alarm Verification Portal</title>
+  <style>
+    :root {
+      --bg: #000000;
+      --card-bg: #1C1C1E;
+      --card-border: #2C2C2E;
+      --text-primary: #FFFFFF;
+      --text-secondary: #8E8E93;
+      --accent-blue: #007AFF;
+      --accent-red: #FF3B30;
+      --accent-green: #34C759;
+      --accent-orange: #FF9F0A;
+      --radius: 16px;
+      --font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text-primary);
+      font-family: var(--font-family);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 480px;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 28px;
+    }
+
+    .logo-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 64px;
+      height: 64px;
+      background: #2C2C2E;
+      border-radius: 20px;
+      margin-bottom: 16px;
+      font-size: 32px;
+      box-shadow: 0 8px 24px rgba(0, 122, 255, 0.2);
+    }
+
+    .title {
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      margin-bottom: 6px;
+    }
+
+    .subtitle {
+      font-size: 14px;
+      color: var(--text-secondary);
+      line-height: 1.4;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius);
+      padding: 24px;
+      margin-bottom: 20px;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6);
+    }
+
+    .form-group {
+      margin-bottom: 18px;
+    }
+
+    label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    input[type="text"],
+    input[type="password"],
+    input[type="time"] {
+      width: 100%;
+      height: 48px;
+      background: #2C2C2E;
+      border: 1px solid #3A3A3C;
+      border-radius: 12px;
+      color: #FFFFFF;
+      font-size: 16px;
+      padding: 0 16px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    input:focus {
+      border-color: var(--accent-blue);
+      box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.3);
+    }
+
+    .btn {
+      width: 100%;
+      height: 50px;
+      border: none;
+      border-radius: 14px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.2s;
+      font-family: inherit;
+    }
+
+    .btn-primary {
+      background: var(--accent-blue);
+      color: #FFFFFF;
+    }
+
+    .btn-primary:hover {
+      background: #0066D6;
+    }
+
+    .btn-secondary {
+      background: #2C2C2E;
+      color: #FFFFFF;
+      border: 1px solid #3A3A3C;
+    }
+
+    .btn-secondary:hover {
+      background: #3A3A3C;
+    }
+
+    .btn-test {
+      background: transparent;
+      color: var(--accent-orange);
+      font-size: 13px;
+      height: 38px;
+      margin-top: 12px;
+    }
+
+    .btn-test:hover {
+      background: rgba(255, 159, 10, 0.1);
+    }
+
+    /* Code Display Area */
+    .portal-active-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--card-border);
+    }
+
+    .portal-user-tag {
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    .portal-user-tag strong {
+      color: #FFFFFF;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .status-badge.locked {
+      background: rgba(255, 59, 48, 0.15);
+      color: var(--accent-red);
+      border: 1px solid rgba(255, 59, 48, 0.3);
+    }
+
+    .status-badge.unlocked {
+      background: rgba(52, 199, 89, 0.15);
+      color: var(--accent-green);
+      border: 1px solid rgba(52, 199, 89, 0.3);
+    }
+
+    .code-box {
+      text-align: center;
+      padding: 24px 16px;
+      background: #121214;
+      border: 1px solid #2C2C2E;
+      border-radius: 14px;
+      margin-bottom: 20px;
+    }
+
+    .code-digits {
+      font-size: 48px;
+      font-weight: 800;
+      letter-spacing: 10px;
+      color: #FFFFFF;
+      font-family: "SF Mono", "Courier New", monospace;
+      text-shadow: 0 0 20px rgba(0, 122, 255, 0.4);
+      margin: 12px 0;
+    }
+
+    .countdown-display {
+      font-size: 32px;
+      font-weight: 700;
+      color: var(--accent-orange);
+      font-family: "SF Mono", "Courier New", monospace;
+      margin: 10px 0;
+    }
+
+    .info-list {
+      font-size: 13px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+    }
+
+    .info-list li {
+      margin-bottom: 8px;
+      margin-left: 20px;
+    }
+
+    .footer {
+      text-align: center;
+      font-size: 12px;
+      color: #636366;
+      margin-top: 24px;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <div class="logo-badge">⏰</div>
+      <h1 class="title">Extreme Alarm Portal</h1>
+      <p class="subtitle">Focus Kiosk PC Verification &amp; Wake-up System</p>
+    </div>
+
+    <!-- Login View -->
+    <div id="loginView" class="card">
+      <form id="loginForm" onsubmit="handleLogin(event)">
+        <div class="form-group">
+          <label for="userId">PC User ID</label>
+          <input type="text" id="userId" value="jisan" placeholder="Enter your User ID" required autocomplete="username">
+        </div>
+
+        <div class="form-group">
+          <label for="password">PC Password</label>
+          <input type="password" id="password" value="1234" placeholder="Enter your password" required autocomplete="current-password">
+        </div>
+
+        <div class="form-group">
+          <label for="alarmTime">Scheduled Alarm Time</label>
+          <input type="time" id="alarmTime" value="06:30" required>
+        </div>
+
+        <button type="submit" class="btn btn-primary" style="margin-top: 20px;">
+          <span>Login &amp; Verify Code</span> ➔
+        </button>
+      </form>
+    </div>
+
+    <!-- Authenticated View -->
+    <div id="portalView" class="card hidden">
+      <div class="portal-active-header">
+        <div class="portal-user-tag">
+          User: <strong id="displayUserId">jisan</strong><br>
+          Alarm: <strong id="displayAlarmTime">06:30 AM</strong>
+        </div>
+        <div id="statusBadge" class="status-badge unlocked">
+          <span id="statusDot">●</span> <span id="statusText">Active</span>
+        </div>
+      </div>
+
+      <!-- Unlocked Code Panel -->
+      <div id="unlockedPanel">
+        <div class="code-box">
+          <p style="font-size: 12px; color: var(--accent-green); font-weight: 700; letter-spacing: 1px; text-transform: uppercase;">
+            ✓ Verification Code Ready
+          </p>
+          <div id="codeDisplay" class="code-digits">------</div>
+          <p style="font-size: 13px; color: var(--text-secondary);">
+            Enter this 6-digit code on your phone screen to dismiss the alarm.
+          </p>
+        </div>
+
+        <button class="btn btn-primary" onclick="copyCode()" id="btnCopyCode" style="margin-bottom: 12px;">
+          📋 Copy Code to Clipboard
+        </button>
+      </div>
+
+      <!-- Locked Panel (Before Unlock Window) -->
+      <div id="lockedPanel" class="hidden">
+        <div class="code-box">
+          <p style="font-size: 12px; color: var(--accent-red); font-weight: 700; letter-spacing: 1px; text-transform: uppercase;">
+            🔒 Code Locked for Sleep Discipline
+          </p>
+          <div id="countdownDisplay" class="countdown-display">--h --m --s</div>
+          <p style="font-size: 13px; color: var(--text-secondary); line-height: 1.4;">
+            The dismissal code unlocks strictly <strong>1.5 hours before</strong> your alarm.<br>
+            Go to sleep! You cannot bypass the alarm in advance.
+          </p>
+        </div>
+
+        <button class="btn btn-test" onclick="toggleTestMode()">
+          ⚡ Toggle Test Mode (Preview Code for Verification)
+        </button>
+      </div>
+
+      <!-- Portal Instructions -->
+      <div style="margin-top: 20px; border-top: 1px solid var(--card-border); padding-top: 16px;">
+        <p style="font-size: 12px; font-weight: 600; color: #FFFFFF; margin-bottom: 8px;">HOW THIS WORKS:</p>
+        <ol class="info-list">
+          <li>Phone alarm rings at maximum volume and cannot be stopped by volume or back buttons.</li>
+          <li>You must get out of bed, start your PC, and open this portal.</li>
+          <li>Enter the displayed 6-digit code on your phone to turn off the alarm.</li>
+          <li>Code synchronizes via SHA-256 Web Crypto — no server or internet connection required.</li>
+        </ol>
+      </div>
+
+      <button class="btn btn-secondary" onclick="handleLogout()" style="margin-top: 20px;">
+        Disconnect Session
+      </button>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+      Focus Kiosk &copy; 2026 &bull; Hardware Wake-Up Sentinel &bull; Standalone Offline Portal
+    </div>
+  </div>
+
+  <script>
+    // State
+    let currentUserId = "jisan";
+    let currentPassword = "1234";
+    let alarmHour = 6;
+    let alarmMinute = 30;
+    let testModeActive = false;
+    let timerInterval = null;
+
+    // Load saved settings
+    window.addEventListener('DOMContentLoaded', () => {
+      const savedUser = localStorage.getItem('fk_alarm_user');
+      const savedPass = localStorage.getItem('fk_alarm_pass');
+      const savedTime = localStorage.getItem('fk_alarm_time');
+
+      if (savedUser) document.getElementById('userId').value = savedUser;
+      if (savedPass) document.getElementById('password').value = savedPass;
+      if (savedTime) document.getElementById('alarmTime').value = savedTime;
+    });
+
+    function handleLogin(e) {
+      e.preventDefault();
+      currentUserId = document.getElementById('userId').value.trim();
+      currentPassword = document.getElementById('password').value.trim();
+      
+      const timeVal = document.getElementById('alarmTime').value;
+      const [h, m] = timeVal.split(':').map(Number);
+      alarmHour = h;
+      alarmMinute = m;
+
+      // Save to localStorage
+      localStorage.setItem('fk_alarm_user', currentUserId);
+      localStorage.setItem('fk_alarm_pass', currentPassword);
+      localStorage.setItem('fk_alarm_time', timeVal);
+
+      document.getElementById('displayUserId').textContent = currentUserId;
+      
+      const amPm = alarmHour >= 12 ? 'PM' : 'AM';
+      const h12 = alarmHour % 12 === 0 ? 12 : alarmHour % 12;
+      const mStr = String(alarmMinute).padStart(2, '0');
+      document.getElementById('displayAlarmTime').textContent = `${h12}:${mStr} ${amPm}`;
+
+      document.getElementById('loginView').classList.add('hidden');
+      document.getElementById('portalView').classList.remove('hidden');
+
+      startPortalUpdates();
+    }
+
+    function handleLogout() {
+      if (timerInterval) clearInterval(timerInterval);
+      document.getElementById('portalView').classList.add('hidden');
+      document.getElementById('loginView').classList.remove('hidden');
+    }
+
+    function toggleTestMode() {
+      testModeActive = !testModeActive;
+      updatePortalState();
+    }
+
+    // Cryptographic calculation matching Android Kotlin byte-for-byte
+    async function calculateDismissalCode(userId, password, hour, minute, dateObj = new Date()) {
+      const yyyy = dateObj.getFullYear();
+      const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+      const dd = String(dateObj.getDate()).padStart(2, '0');
+      const dateString = `${yyyy}-${mm}-${dd}`;
+
+      const normalizedUser = userId.trim().toLowerCase();
+      const normalizedPass = password.trim();
+      const input = `${normalizedUser}:${normalizedPass}:${dateString}-${hour}:${minute}`;
+
+      const encoder = new TextEncoder();
+      const data = encoder.encode(input);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+      const dataView = new DataView(hashBuffer);
+      const intVal = dataView.getInt32(0, false); // Big-endian 32-bit signed int
+      const code = (Math.abs(intVal) % 900000) + 100000;
+      return code.toString();
+    }
+
+    function isCodeUnlocked(hour, minute, now = new Date()) {
+      const alarmDate = new Date(now);
+      alarmDate.setHours(hour, minute, 0, 0);
+
+      const nowMs = now.getTime();
+      const alarmMs = alarmDate.getTime();
+      const unlockStartMs = alarmMs - (90 * 60 * 1000); // 1.5 hours (90 mins) before alarm
+      const unlockEndMs = alarmMs + (4 * 3600 * 1000);   // 4 hours after alarm
+
+      return (nowMs >= unlockStartMs && nowMs <= unlockEndMs);
+    }
+
+    function getMsUntilUnlock(hour, minute, now = new Date()) {
+      const alarmDate = new Date(now);
+      alarmDate.setHours(hour, minute, 0, 0);
+
+      const unlockStartMs = alarmDate.getTime() - (90 * 60 * 1000);
+      let diff = unlockStartMs - now.getTime();
+      if (diff < 0) {
+        // If alarm today already passed by more than 4 hours, calculate for tomorrow
+        alarmDate.setDate(alarmDate.getDate() + 1);
+        const tomorrowUnlockStart = alarmDate.getTime() - (90 * 60 * 1000);
+        diff = tomorrowUnlockStart - now.getTime();
+      }
+      return Math.max(0, diff);
+    }
+
+    async function updatePortalState() {
+      const now = new Date();
+      const unlocked = isCodeUnlocked(alarmHour, alarmMinute, now) || testModeActive;
+
+      const statusBadge = document.getElementById('statusBadge');
+      const statusText = document.getElementById('statusText');
+      const unlockedPanel = document.getElementById('unlockedPanel');
+      const lockedPanel = document.getElementById('lockedPanel');
+
+      if (unlocked) {
+        statusBadge.className = 'status-badge unlocked';
+        statusText.textContent = testModeActive ? 'Test Mode Active' : 'Code Active';
+
+        unlockedPanel.classList.remove('hidden');
+        lockedPanel.classList.add('hidden');
+
+        const code = await calculateDismissalCode(currentUserId, currentPassword, alarmHour, alarmMinute, now);
+        document.getElementById('codeDisplay').textContent = `${code.slice(0, 3)} ${code.slice(3)}`;
+      } else {
+        statusBadge.className = 'status-badge locked';
+        statusText.textContent = 'Sleep Locked';
+
+        unlockedPanel.classList.add('hidden');
+        lockedPanel.classList.remove('hidden');
+
+        const msRemaining = getMsUntilUnlock(alarmHour, alarmMinute, now);
+        const hours = Math.floor(msRemaining / (3600 * 1000));
+        const minutes = Math.floor((msRemaining % (3600 * 1000)) / (60 * 1000));
+        const seconds = Math.floor((msRemaining % (60 * 1000)) / 1000);
+
+        const hStr = String(hours).padStart(2, '0');
+        const mStr = String(minutes).padStart(2, '0');
+        const sStr = String(seconds).padStart(2, '0');
+
+        document.getElementById('countdownDisplay').textContent = `${hStr}h ${mStr}m ${sStr}s`;
+      }
+    }
+
+    function startPortalUpdates() {
+      if (timerInterval) clearInterval(timerInterval);
+      updatePortalState();
+      timerInterval = setInterval(updatePortalState, 1000);
+    }
+
+    async function copyCode() {
+      const codeText = document.getElementById('codeDisplay').textContent.replace(/\s/g, '');
+      try {
+        await navigator.clipboard.writeText(codeText);
+        const btn = document.getElementById('btnCopyCode');
+        btn.textContent = '✓ Copied to Clipboard!';
+        setTimeout(() => {
+          btn.textContent = '📋 Copy Code to Clipboard';
+        }, 2000);
+      } catch (err) {
+        alert(`Code: ${codeText}`);
+      }
+    }
+  </script>
+</body>
+</html>

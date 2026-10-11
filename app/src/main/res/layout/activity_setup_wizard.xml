@@ -15,6 +15,8 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:focusable="true"
+    android:focusableInTouchMode="true"
     android:background="#000000">
 
     <!-- ── Apple Large Title & Version Header ──────────────────────────────── -->
@@ -235,6 +237,8 @@
         android:clipToPadding="false"
         android:paddingTop="2dp"
         android:paddingBottom="4dp"
+        android:focusable="false"
+        android:focusableInTouchMode="false"
         app:layout_constraintTop_toBottomOf="@id/searchRowLayout"
         app:layout_constraintBottom_toTopOf="@id/controlsPanel"
         app:layout_goneMarginBottom="0dp"
@@ -838,6 +842,98 @@
             </LinearLayout>
         </LinearLayout>
 
+        <!-- Extreme Wake-up Alarm Settings -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingTop="3dp"
+            android:paddingBottom="2dp">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Extreme Wake-up Alarm"
+                    android:textColor="#FFFFFF"
+                    android:textSize="13sp" />
+
+                <TextView
+                    android:id="@+id/tvAlarmSummary"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Daily at 6:30 AM (PC Code Verification)"
+                    android:textColor="#8E8E93"
+                    android:textSize="11sp" />
+            </LinearLayout>
+
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/switchExtremeAlarm"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:checked="true"
+                app:thumbTint="#FFFFFF"
+                app:trackTint="#007AFF" />
+        </LinearLayout>
+
+        <!-- Alarm Configuration Details -->
+        <LinearLayout
+            android:id="@+id/layoutAlarmConfig"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingBottom="6dp"
+            android:visibility="visible">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="4dp">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnPickAlarmTime"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:layout_height="32dp"
+                    android:text="Time: 6:30 AM"
+                    android:textSize="10sp"
+                    android:textColor="#007AFF"
+                    android:layout_marginEnd="4dp"
+                    app:strokeColor="#007AFF"
+                    app:cornerRadius="16dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnAlarmCredentials"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:layout_height="32dp"
+                    android:text="PC ID: jisan"
+                    android:textSize="10sp"
+                    android:textColor="#007AFF"
+                    app:strokeColor="#007AFF"
+                    app:cornerRadius="16dp" />
+            </LinearLayout>
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnTestAlarm"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="match_parent"
+                android:layout_height="30dp"
+                android:text="⚡ TEST ALARM NOW (VERIFY PC DISMISSAL)"
+                android:textSize="10sp"
+                android:textColor="#FF9F0A" />
+        </LinearLayout>
+
         <!-- Primary Action Button (Apple HIG Prominent Action Pill) -->
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnActivateLock"
@@ -938,10 +1034,72 @@
                     android:layout_marginBottom="4dp" />
 
                 <TextView
+                    android:id="@+id/tvActiveWorkWindowCountdown"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Next window opens in: --h --m --s"
+                    android:textColor="#FF9F0A"
+                    android:textSize="15sp"
+                    android:fontFamily="sans-serif-medium"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="4dp" />
+
+                <TextView
                     android:id="@+id/tvActiveWorkWindowDetails"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="Video upload apps unlock periodically for creators."
+                    android:textColor="#8E8E93"
+                    android:textSize="11sp" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Active Extreme Alarm Card -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/cardActiveAlarmStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:cardCornerRadius="14dp"
+            app:cardElevation="0dp"
+            app:strokeWidth="1dp"
+            app:strokeColor="#2C2C2E"
+            app:cardBackgroundColor="#1C1C1E"
+            android:layout_marginBottom="16dp"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="14dp">
+
+                <TextView
+                    android:id="@+id/tvActiveAlarmTitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Extreme Alarm: 06:30 AM ⏰"
+                    android:textColor="#FF3B30"
+                    android:textSize="13sp"
+                    android:fontFamily="sans-serif-medium"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="4dp" />
+
+                <TextView
+                    android:id="@+id/tvActiveAlarmCountdown"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Rings in: --h --m --s"
+                    android:textColor="#FFFFFF"
+                    android:textSize="15sp"
+                    android:fontFamily="sans-serif-medium"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="4dp" />
+
+                <TextView
+                    android:id="@+id/tvActiveAlarmDetails"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Dismissal requires verification code from PC Web Portal."
                     android:textColor="#8E8E93"
                     android:textSize="11sp" />
             </LinearLayout>
