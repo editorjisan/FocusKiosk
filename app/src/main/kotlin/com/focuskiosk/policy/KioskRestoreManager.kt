@@ -211,7 +211,7 @@ object KioskRestoreManager {
         // Launch MainActivity so user sees unlocked state
         runCatching {
             val mainIntent = Intent(appContext, com.focuskiosk.MainActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
             }
             appContext.startActivity(mainIntent)
         }
