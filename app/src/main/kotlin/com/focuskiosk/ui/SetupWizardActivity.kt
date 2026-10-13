@@ -144,6 +144,8 @@ open class SetupWizardActivity : AppCompatActivity() {
         setupDurationControls()
         setupWorkWindowControls()
         setupAlarmControls()
+        binding.switchUsbDebugging.isChecked = SecureStorage.getBoolean(this, SecureStorage.KEY_BLOCK_USB_DEBUGGING, false)
+        binding.switchFactoryReset.isChecked = SecureStorage.getBoolean(this, SecureStorage.KEY_BLOCK_FACTORY_RESET, true)
         binding.btnActivateLock.setOnClickListener { confirmActivation() }
 
         binding.btnCheckUpdate.setOnClickListener { triggerUpdateFlow() }
@@ -565,7 +567,59 @@ open class SetupWizardActivity : AppCompatActivity() {
             updateWorkWindowSummary()
         }
 
+        binding.btnPickWorkWindowApps.setOnClickListener {
+            showWorkWindowAppPickerDialog()
+        }
+
         updateWorkWindowSummary()
+    }
+
+    private fun showWorkWindowAppPickerDialog() {
+        val allApps = cachedAppList
+        if (allApps.isNullOrEmpty()) {
+            Toast.makeText(this, "Loading installed apps, please try again in a moment...", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val currentSelected = SecureStorage.getPackageSet(this, SecureStorage.KEY_WORK_WINDOW_PACKAGES)
+        val defaultUploadKeywords = listOf(
+            "youtube", "tiktok", "instagram", "facebook", "drive", "chrome",
+            "phoenix", "premiere", "capcut", "vlogger", "inshot", "kinemaster",
+            "video", "creator", "snaptube", "camera", "iriun", "webcam", "droidcam"
+        )
+        val initialSelected = if (currentSelected.isNotEmpty()) {
+            currentSelected
+        } else {
+            allApps.filter { app ->
+                defaultUploadKeywords.any { app.packageName.contains(it, ignoreCase = true) }
+            }.map { it.packageName }.toSet()
+        }
+
+        val appLabels = allApps.map { it.label }.toTypedArray()
+        val checkedItems = BooleanArray(allApps.size) { i ->
+            allApps[i].packageName in initialSelected
+        }
+
+        val selectedSet = initialSelected.toMutableSet()
+
+        AlertDialog.Builder(this)
+            .setTitle("Select Upload Window Apps")
+            .setMultiChoiceItems(appLabels, checkedItems) { _, which, isChecked ->
+                val pkg = allApps[which].packageName
+                if (isChecked) selectedSet.add(pkg) else selectedSet.remove(pkg)
+            }
+            .setPositiveButton("Save (${selectedSet.size})") { _, _ ->
+                SecureStorage.putPackageSet(this, SecureStorage.KEY_WORK_WINDOW_PACKAGES, selectedSet)
+                updateWorkWindowSummary()
+                Toast.makeText(this, "${selectedSet.size} upload apps configured", Toast.LENGTH_SHORT).show()
+            }
+            .setNeutralButton("Reset to Default") { _, _ ->
+                SecureStorage.putPackageSet(this, SecureStorage.KEY_WORK_WINDOW_PACKAGES, emptySet())
+                updateWorkWindowSummary()
+                Toast.makeText(this, "Reset to default creator apps", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun updateIntervalButtons() {
@@ -585,6 +639,13 @@ open class SetupWizardActivity : AppCompatActivity() {
 
         val durationStr = if (selectedWorkWindowDurationMins < 60) "${selectedWorkWindowDurationMins}m" else "${selectedWorkWindowDurationMins / 60}h"
         binding.btnPickWorkWindowDuration.text = "Duration: $durationStr"
+
+        val configuredApps = SecureStorage.getPackageSet(this, SecureStorage.KEY_WORK_WINDOW_PACKAGES)
+        binding.btnPickWorkWindowApps.text = if (configuredApps.isNotEmpty()) {
+            "Apps (${configuredApps.size})"
+        } else {
+            "Apps (Default)"
+        }
 
         val intervalStr = when (selectedIntervalDays) {
             1 -> "Daily"
@@ -675,12 +736,10 @@ open class SetupWizardActivity : AppCompatActivity() {
         }
 
         binding.tvActiveWorkWindowCountdown.visibility = View.VISIBLE
-        val isWindowActive = com.focuskiosk.policy.WorkWindowScheduler.isWindowActive(this)
-        val startMs = SecureStorage.getLong(this, SecureStorage.KEY_NEXT_WINDOW_START_MS, 0L)
-        val endMs = SecureStorage.getLong(this, SecureStorage.KEY_NEXT_WINDOW_END_MS, 0L)
+        val schedule = com.focuskiosk.policy.WorkWindowScheduler.calculateWindowSchedule(this, now)
 
-        if (isWindowActive && endMs > now) {
-            val rem = endMs - now
+        if (schedule.isCurrentlyActive) {
+            val rem = (schedule.currentWindowEndMs - now).coerceAtLeast(0L)
             val hours = rem / 3600_000L
             val minutes = (rem % 3600_000L) / 60_000L
             val seconds = (rem % 60_000L) / 1000L
@@ -690,20 +749,7 @@ open class SetupWizardActivity : AppCompatActivity() {
             binding.tvActiveWorkWindowCountdown.setTextColor(Color.parseColor("#34C759"))
             binding.tvActiveWorkWindowDetails.text = "Creator apps are temporarily accessible for video uploading."
         } else {
-            val effectiveStartMs = if (startMs > now) startMs else {
-                val sh = SecureStorage.getInt(this, SecureStorage.KEY_WORK_WINDOW_START_HOUR, 20)
-                val sm = SecureStorage.getInt(this, SecureStorage.KEY_WORK_WINDOW_START_MINUTE, 0)
-                val cal = java.util.Calendar.getInstance().apply {
-                    set(java.util.Calendar.HOUR_OF_DAY, sh)
-                    set(java.util.Calendar.MINUTE, sm)
-                    set(java.util.Calendar.SECOND, 0)
-                    set(java.util.Calendar.MILLISECOND, 0)
-                    if (timeInMillis <= now) add(java.util.Calendar.DAY_OF_YEAR, SecureStorage.getInt(this@SetupWizardActivity, SecureStorage.KEY_WORK_WINDOW_INTERVAL_DAYS, 1).coerceAtLeast(1))
-                }
-                cal.timeInMillis
-            }
-
-            val rem = (effectiveStartMs - now).coerceAtLeast(0L)
+            val rem = (schedule.nextWindowStartMs - now).coerceAtLeast(0L)
             val days = rem / (24L * 3600_000L)
             val hours = (rem % (24L * 3600_000L)) / 3600_000L
             val minutes = (rem % 3600_000L) / 60_000L
@@ -987,6 +1033,14 @@ open class SetupWizardActivity : AppCompatActivity() {
         SecureStorage.putInt(this, SecureStorage.KEY_WORK_WINDOW_START_HOUR, selectedWorkWindowStartHour)
         SecureStorage.putInt(this, SecureStorage.KEY_WORK_WINDOW_START_MINUTE, selectedWorkWindowStartMinute)
         SecureStorage.putInt(this, SecureStorage.KEY_WORK_WINDOW_DURATION_MINS, selectedWorkWindowDurationMins)
+
+        val anchorCal = java.util.Calendar.getInstance().apply {
+            set(java.util.Calendar.HOUR_OF_DAY, selectedWorkWindowStartHour)
+            set(java.util.Calendar.MINUTE, selectedWorkWindowStartMinute)
+            set(java.util.Calendar.SECOND, 0)
+            set(java.util.Calendar.MILLISECOND, 0)
+        }
+        SecureStorage.putLong(this, SecureStorage.KEY_WORK_WINDOW_ANCHOR_MS, anchorCal.timeInMillis)
 
         // Persist Extreme Wake-up Alarm settings
         val alarmEnabled = binding.switchExtremeAlarm.isChecked

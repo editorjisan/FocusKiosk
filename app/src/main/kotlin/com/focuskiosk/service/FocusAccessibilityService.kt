@@ -104,7 +104,9 @@ class FocusAccessibilityService : AccessibilityService() {
         // 1. Zero-Tolerance Blocked App Trap: Blocks access via notification taps, deep links, or recents
         if (SecureStorage.getBoolean(applicationContext, SecureStorage.KEY_LOCK_ACTIVE, false)) {
             val blockedPkgs = SecureStorage.getBlockedPackages(applicationContext)
-            if (pkg in blockedPkgs) {
+            val isWorkWindow = com.focuskiosk.policy.WorkWindowScheduler.isWindowActive(applicationContext)
+            val workApps = if (isWorkWindow) com.focuskiosk.policy.WorkWindowScheduler.getAppsToUnlock(applicationContext) else emptySet()
+            if (pkg in blockedPkgs && pkg !in workApps) {
                 val now = System.currentTimeMillis()
                 if (now - lastActionTimestamp > 400L) {
                     lastActionTimestamp = now
@@ -112,7 +114,6 @@ class FocusAccessibilityService : AccessibilityService() {
                     performGlobalAction(GLOBAL_ACTION_HOME)
                     runCatching {
                         PolicyEnforcer.suspendPackages(applicationContext, arrayOf(pkg))
-                        PolicyEnforcer.hideApplication(applicationContext, pkg)
                     }
                     FocusNotificationService.clearBlockedNotifications(applicationContext)
                     mainHandler.post {
@@ -133,6 +134,11 @@ class FocusAccessibilityService : AccessibilityService() {
         val isBrowserApp = pkg in BROWSER_PACKAGES
 
         if (isSocialApp || isBrowserApp) {
+            // If inside active scheduled upload window, allow social & browser apps for video uploading
+            if (com.focuskiosk.policy.WorkWindowScheduler.isWindowActive(applicationContext)) {
+                return
+            }
+
             val isBrowserActivity = className.contains("BrowserLiteActivity", ignoreCase = true) ||
                                     className.contains("BrowserLite", ignoreCase = true) ||
                                     className.contains("InAppBrowser", ignoreCase = true) ||

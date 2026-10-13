@@ -697,19 +697,32 @@
             android:paddingTop="3dp"
             android:paddingBottom="4dp">
 
-            <TextView
+            <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="Block USB Debugging"
-                android:textColor="#FFFFFF"
-                android:textSize="13sp" />
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Block USB Debugging"
+                    android:textColor="#FFFFFF"
+                    android:textSize="13sp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Keep OFF for Iriun Webcam or PC USB connection"
+                    android:textColor="#8E8E93"
+                    android:textSize="10sp" />
+            </LinearLayout>
 
             <com.google.android.material.switchmaterial.SwitchMaterial
                 android:id="@+id/switchUsbDebugging"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:checked="true"
+                android:checked="false"
                 app:thumbTint="#FFFFFF"
                 app:trackTint="#007AFF" />
         </LinearLayout>
@@ -835,6 +848,19 @@
                     android:layout_weight="1"
                     android:layout_height="32dp"
                     android:text="Duration: 1h"
+                    android:textSize="10sp"
+                    android:textColor="#007AFF"
+                    android:layout_marginEnd="4dp"
+                    app:strokeColor="#007AFF"
+                    app:cornerRadius="16dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnPickWorkWindowApps"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:layout_height="32dp"
+                    android:text="Apps"
                     android:textSize="10sp"
                     android:textColor="#007AFF"
                     app:strokeColor="#007AFF"

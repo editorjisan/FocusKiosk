@@ -102,8 +102,7 @@ object KioskRestoreManager {
         // Combine stored explicit blocked package set AND system queried packages
         val storedBlocked = SecureStorage.getBlockedPackages(appContext)
         val queriedPackages = installedApps.map { it.packageName }
-        val packagesToRestore = (storedBlocked + queriedPackages)
-            .filter { it != appContext.packageName }
+        val packagesToRestore = (storedBlocked + queriedPackages + appContext.packageName)
             .toSet()
 
         Log.i(TAG, "Found ${packagesToRestore.size} packages to restore (stored=${storedBlocked.size}, queried=${queriedPackages.size}).")
@@ -122,6 +121,11 @@ object KioskRestoreManager {
             }
         }
 
+        // Explicit guarantee: ensure our own app is never left suspended
+        runCatching {
+            devicePolicyManager.setPackagesSuspended(adminComponent, arrayOf(appContext.packageName), false)
+        }
+
         // 4. Concurrently unhide all packages in parallel chunks (10x faster)
         val chunks = packagesToRestore.chunked(20)
         runBlocking(Dispatchers.IO) {
@@ -137,6 +141,9 @@ object KioskRestoreManager {
                     }
                 }
             }.awaitAll()
+        }
+        runCatching {
+            devicePolicyManager.setApplicationHidden(adminComponent, appContext.packageName, false)
         }
         Log.i(TAG, "Concurrently unhidden ${packagesToRestore.size} applications.")
 
@@ -200,6 +207,14 @@ object KioskRestoreManager {
             }
             Log.i(TAG, "Re-enabled all launcher components.")
         }.onFailure { Log.w(TAG, "Failed re-enabling launcher components: ${it.message}") }
+
+        // Launch MainActivity so user sees unlocked state
+        runCatching {
+            val mainIntent = Intent(appContext, com.focuskiosk.MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+            appContext.startActivity(mainIntent)
+        }
 
         // 8. Update persistent secure state
         SecureStorage.putBoolean(appContext, SecureStorage.KEY_LOCK_ACTIVE, false)

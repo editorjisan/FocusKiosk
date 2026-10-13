@@ -43,6 +43,7 @@ object SecureStorage {
     const val KEY_WORK_WINDOW_DURATION_MINS = "work_window_duration_mins" // e.g. 60
     const val KEY_WORK_WINDOW_PACKAGES      = "work_window_packages"      // Selected apps for upload window
     const val KEY_WORK_WINDOW_ACTIVE        = "work_window_active"        // Currently inside unlocked window
+    const val KEY_WORK_WINDOW_ANCHOR_MS     = "work_window_anchor_ms"     // Epoch anchor for multi-day calculation
     const val KEY_NEXT_WINDOW_START_MS      = "next_window_start_ms"
     const val KEY_NEXT_WINDOW_END_MS        = "next_window_end_ms"
     // ─────────────────────────────────────────────────────────────────────────

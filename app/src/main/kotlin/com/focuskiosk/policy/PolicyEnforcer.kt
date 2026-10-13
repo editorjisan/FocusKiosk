@@ -348,10 +348,13 @@ object PolicyEnforcer {
         "com.google.android.apps.messaging",
         "com.android.mms",
         "com.android.mms.service",
-        // Google core
+        // Google core & Google Play Store (must NEVER be suspended or hidden, else apps like Iriun Webcam throw 'Check that Google Play is enabled')
+        "com.android.vending",
         "com.google.android.gms",
         "com.google.android.gsf",
         "com.google.android.gsf.login",
+        "com.google.android.play.games",
+        "com.google.android.feedback",
         "com.google.android.partnersetup",
         "com.google.android.ext.services",
         "com.google.android.ext.shared",
@@ -359,6 +362,12 @@ object PolicyEnforcer {
         "com.android.webview",
         "com.google.android.configupdater",
         "com.google.android.gmsintegration",
+        // Essential PC Webcam & Camera utilities (Iriun Webcam, DroidCam, etc. - never suspend or hide)
+        "com.jacksoft.iriun.webcam",
+        "com.jacksoft.iriun.webcam4k",
+        "com.dev47apps.droidcam",
+        "com.dev47apps.droidcamx",
+        "com.pas.webcam",
         // Input methods / keyboards
         "com.google.android.inputmethod.latin",
         "com.android.inputmethod.latin",
@@ -477,29 +486,27 @@ object PolicyEnforcer {
         SecureStorage.setBlockedPackages(context, toBlock.toSet())
 
         // 3. FAST-LOCK: Immediately suspend all targeted packages in ONE bulk IPC call (< 30ms)!
-        // This guarantees that all un-whitelisted apps are immediately disabled on the spot.
-        val safeToSuspend = toBlock.toTypedArray()
+        // If an upload window is currently active, avoid suspending designated creator apps.
+        val isWindowActive = WorkWindowScheduler.isWindowActive(context)
+        val workPackages = if (isWindowActive) WorkWindowScheduler.getAppsToUnlock(context) else emptySet()
+        val appsToSuspend = toBlock.filter { it !in workPackages }
+        val safeToSuspend = appsToSuspend.toTypedArray()
         runCatching {
             val failed = dpm(context).setPackagesSuspended(admin(context), safeToSuspend, true)
             Log.i(TAG, "Bulk suspended ${safeToSuspend.size - (failed?.size ?: 0)} packages in <30ms.")
         }.onFailure { Log.w(TAG, "setPackagesSuspended bulk failed: ${it.message}") }
 
         // 3b. AUTOMATIC NOTIFICATION SUPPRESSION: Revoke notification permissions & purge shade
-        suppressNotifications(context, toBlock)
+        suppressNotifications(context, appsToSuspend)
 
-        // 4. Concurrently hide each non-whitelisted app in parallel batches (10x faster than sequential)
-        val chunks = toBlock.chunked(20)
-        runBlocking(Dispatchers.IO) {
-            chunks.map { chunk ->
-                async {
-                    chunk.forEach { pkg ->
-                        runCatching {
-                            dpm(context).setApplicationHidden(admin(context), pkg, true)
-                        }
-                    }
-                }
-            }.awaitAll()
-        }
+        // 4. DESKTOP ICON INTEGRITY GUARANTEE:
+        // We deliberately DO NOT call dpm.setApplicationHidden(admin, pkg, true).
+        // On Android OEM launchers (HiOS, XOS, MIUI, OneUI, ColorOS, etc.), hiding an app permanently
+        // wipes its shortcut icon, folders, and widgets from the home screen grid. When unhidden later,
+        // launchers do not recreate the shortcuts, leading users to believe their apps were deleted.
+        // Calling setPackagesSuspended(true) completely pauses, freezes, and locks the apps at the OS level
+        // while preserving 100% of user desktop layouts and shortcuts intact!
+        Log.i(TAG, "Preserving desktop shortcuts (setApplicationHidden skipped to avoid OEM icon wipe).")
 
         // 5. Ensure sideloading and manual APK installs are NEVER blocked.
         unblockAppInstalls(context)
