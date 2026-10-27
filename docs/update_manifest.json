@@ -1,0 +1,8 @@
+{
+  "versionCode": 27,
+  "versionName": "1.4.0",
+  "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.4.0/FocusKiosk.apk",
+  "sha256": "",
+  "releaseNotes": "v1.4.0: One-click upgrade reset for stuck 30-day lock, instant 'Video Upload Done' re-lock button, fixed multi-day schedule cycle protection, and responsive scrollable lock card UI.",
+  "minSdkVersion": 28
+}
