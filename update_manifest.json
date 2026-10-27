@@ -1,8 +1,8 @@
 {
-  "versionCode": 26,
-  "versionName": "1.3.2",
-  "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.3.2/FocusKiosk.apk",
+  "versionCode": 27,
+  "versionName": "1.4.0",
+  "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.4.0/FocusKiosk.apk",
   "sha256": "",
-  "releaseNotes": "Fix Iriun Webcam Google Play licensing, preserve 100% desktop icons without launcher deletion, deterministic multi-day upload window scheduler with exact RTC alarm clock, web filtering pause during upload window, and customizable upload apps picker.",
+  "releaseNotes": "v1.4.0: One-click upgrade reset for stuck 30-day lock, instant 'Video Upload Done' re-lock button, fixed multi-day schedule cycle protection, and responsive scrollable lock card UI.",
   "minSdkVersion": 28
 }

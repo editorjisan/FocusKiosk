@@ -978,21 +978,26 @@
     </LinearLayout>
 
     <!-- ── Apple Inset Active Lock Status Panel (shown when lock is active) ── -->
-    <LinearLayout
+    <androidx.core.widget.NestedScrollView
         android:id="@+id/activeLockPanel"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:orientation="vertical"
-        android:gravity="center"
-        android:paddingStart="24dp"
-        android:paddingEnd="24dp"
-        android:paddingTop="16dp"
-        android:paddingBottom="16dp"
+        android:fillViewport="true"
         android:visibility="gone"
         app:layout_constraintTop_toBottomOf="@id/otaUpdateCard"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="center_horizontal"
+            android:paddingStart="20dp"
+            android:paddingEnd="20dp"
+            android:paddingTop="20dp"
+            android:paddingBottom="30dp">
 
         <ImageView
             android:layout_width="56dp"
@@ -1077,6 +1082,21 @@
                     android:text="Video upload apps unlock periodically for creators."
                     android:textColor="#8E8E93"
                     android:textSize="11sp" />
+
+                <!-- One-click Button to re-lock as soon as video upload is complete -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnEndWorkWindowEarly"
+                    style="@style/Widget.MaterialComponents.Button"
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    android:layout_marginTop="10dp"
+                    android:text="ভিডিও আপলোড শেষ (Lock Now)"
+                    android:textColor="#FFFFFF"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:visibility="gone"
+                    app:cornerRadius="12dp"
+                    android:backgroundTint="#FF3B30" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
@@ -1139,6 +1159,7 @@
             android:textSize="12sp"
             android:gravity="center" />
 
-    </LinearLayout>
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

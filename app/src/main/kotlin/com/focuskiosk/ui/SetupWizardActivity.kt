@@ -660,6 +660,18 @@ open class SetupWizardActivity : AppCompatActivity() {
     // --  Lock State Sync & Countdown  -----------------------------------------
 
     private fun syncLockState() {
+        // v1.4.0 Auto-Unlock check on launch
+        val resetAlreadyDone = SecureStorage.getBoolean(this, SecureStorage.KEY_RESET_APPLIED_V140, false)
+        if (!resetAlreadyDone) {
+            Log.i("SetupWizard", "v1.4.0 First launch clean slate: Resetting active 30-day lock for fresh start!")
+            SecureStorage.putBoolean(this, SecureStorage.KEY_RESET_APPLIED_V140, true)
+            activeCountdownJob?.cancel()
+            KioskRestoreManager.restoreAllApps(this)
+            showSetupMode()
+            loadApps()
+            return
+        }
+
         val deviceContext = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             createDeviceProtectedStorageContext()
         } else {
@@ -748,7 +760,14 @@ open class SetupWizardActivity : AppCompatActivity() {
             binding.tvActiveWorkWindowCountdown.text = String.format(Locale.US, "Auto-locks in: %02dh %02dm %02ds", hours, minutes, seconds)
             binding.tvActiveWorkWindowCountdown.setTextColor(Color.parseColor("#34C759"))
             binding.tvActiveWorkWindowDetails.text = "Creator apps are temporarily accessible for video uploading."
+            binding.btnEndWorkWindowEarly.visibility = View.VISIBLE
+            binding.btnEndWorkWindowEarly.setOnClickListener {
+                Toast.makeText(this@SetupWizardActivity, "Re-locking upload apps immediately...", Toast.LENGTH_SHORT).show()
+                com.focuskiosk.policy.WorkWindowScheduler.onWindowEnd(this@SetupWizardActivity, isManualEarlyDone = true)
+                updateActiveWorkWindowLiveCountdown(System.currentTimeMillis())
+            }
         } else {
+            binding.btnEndWorkWindowEarly.visibility = View.GONE
             val rem = (schedule.nextWindowStartMs - now).coerceAtLeast(0L)
             val days = rem / (24L * 3600_000L)
             val hours = (rem % (24L * 3600_000L)) / 3600_000L

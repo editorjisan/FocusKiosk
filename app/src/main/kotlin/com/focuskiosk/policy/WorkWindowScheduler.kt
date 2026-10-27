@@ -113,8 +113,16 @@ object WorkWindowScheduler {
         // Check if today matches the interval cadence
         val isTodayIntervalDay = (diffDays % intervalDays == 0)
 
+        // Generate unique cycle ID for today's scheduled window (e.g. "cycle_2026-10-27_20_00")
+        val cycleDateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(todayWindowStart))
+        val currentCycleId = "cycle_${cycleDateStr}_${startHour}_${startMinute}"
+        val lastFinishedCycleId = SecureStorage.getString(context, SecureStorage.KEY_WORK_WINDOW_CYCLE_ID, "")
+
+        // If this specific cycle was already finished (by time expiration or user clicking "Video Upload Done"), do not reactivate it today!
+        val isCycleAlreadyFinished = (lastFinishedCycleId == currentCycleId)
+
         return if (isTodayIntervalDay) {
-            if (now in todayWindowStart until todayWindowEnd) {
+            if (now in todayWindowStart until todayWindowEnd && !isCycleAlreadyFinished) {
                 // ACTIVE NOW!
                 val nextStartCal = Calendar.getInstance().apply {
                     timeInMillis = todayWindowStart
@@ -135,7 +143,7 @@ object WorkWindowScheduler {
                     nextWindowEndMs = todayWindowEnd
                 )
             } else {
-                // Today's window has already passed; advance by intervalDays
+                // Today's window has already passed or was finished; advance by intervalDays
                 val nextStartCal = Calendar.getInstance().apply {
                     timeInMillis = todayWindowStart
                     add(Calendar.DAY_OF_YEAR, intervalDays)
@@ -250,16 +258,25 @@ object WorkWindowScheduler {
     /**
      * Executes when the scheduled upload window ends.
      * Automatically re-suspends work apps and re-enforces web filtering.
+     * @param isManualEarlyDone true if user clicked "Video Upload Done (Lock Now)"
      */
-    fun onWindowEnd(context: Context) {
+    fun onWindowEnd(context: Context, isManualEarlyDone: Boolean = false) {
         val appContext = context.applicationContext
         if (!SecureStorage.isLockActive(appContext)) return
 
         Log.i(TAG, "=======================================================")
-        Log.i(TAG, "WORK WINDOW ENDED: Automatically re-locking apps!")
+        Log.i(TAG, "WORK WINDOW ENDED (manual=$isManualEarlyDone): Automatically re-locking apps!")
         Log.i(TAG, "=======================================================")
 
         SecureStorage.putBoolean(appContext, SecureStorage.KEY_WORK_WINDOW_ACTIVE, false)
+
+        // Mark today's cycle as finished so it doesn't trigger again until the next interval day
+        val now = System.currentTimeMillis()
+        val startHour = SecureStorage.getInt(appContext, SecureStorage.KEY_WORK_WINDOW_START_HOUR, 20)
+        val startMinute = SecureStorage.getInt(appContext, SecureStorage.KEY_WORK_WINDOW_START_MINUTE, 0)
+        val cycleDateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(now))
+        val currentCycleId = "cycle_${cycleDateStr}_${startHour}_${startMinute}"
+        SecureStorage.putString(appContext, SecureStorage.KEY_WORK_WINDOW_CYCLE_ID, currentCycleId)
 
         val workPackages = getAppsToUnlock(appContext)
 
@@ -272,10 +289,16 @@ object WorkWindowScheduler {
         // CRITICAL: Re-enforce web filtering!
         PolicyEnforcer.enforceWebFiltering(appContext)
 
+        val notifMessage = if (isManualEarlyDone) {
+            "Video upload done! Creator apps re-locked immediately. Good job staying focused!"
+        } else {
+            "Upload window ended. Focus Lock re-enforced automatically."
+        }
+
         showNotification(
             appContext,
             "Upload Window Closed 🔒",
-            "Focus Lock re-enforced automatically. Good job staying focused!"
+            notifMessage
         )
 
         // Schedule the next periodic window
