@@ -280,8 +280,13 @@ object WorkWindowScheduler {
 
         val workPackages = getAppsToUnlock(appContext)
 
-        // Re-suspend designated work apps (do NOT hide to prevent OEM desktop icon deletion!)
+        // Re-suspend designated work apps
         PolicyEnforcer.suspendPackages(appContext, workPackages.toTypedArray())
+
+        // Re-hide designated work apps so they completely disappear again
+        workPackages.forEach { pkg ->
+            PolicyEnforcer.hideApplication(appContext, pkg)
+        }
 
         // Re-suppress notifications
         PolicyEnforcer.suppressNotifications(appContext, workPackages.toList())
@@ -335,18 +340,9 @@ object WorkWindowScheduler {
         val configured = SecureStorage.getPackageSet(context, SecureStorage.KEY_WORK_WINDOW_PACKAGES)
         if (configured.isNotEmpty()) return configured
 
-        // Default creator / work app package set if none explicitly configured:
+        // Default: If no specific apps were picked for upload window, UNLOCK ALL BLOCKED APPS during scheduled window!
         val blocked = SecureStorage.getBlockedPackages(context)
-        val defaultUploadKeywords = listOf(
-            "youtube", "tiktok", "instagram", "facebook", "drive", "chrome",
-            "phoenix", "premiere", "capcut", "vlogger", "inshot", "kinemaster",
-            "video", "creator", "snaptube", "camera", "iriun", "webcam", "droidcam"
-        )
-        val matched = blocked.filter { pkg ->
-            defaultUploadKeywords.any { pkg.contains(it, ignoreCase = true) }
-        }.toSet()
-
-        return if (matched.isNotEmpty()) matched else blocked
+        return blocked
     }
 
     private fun setExactAlarm(context: Context, triggerMs: Long, action: String, requestCode: Int) {

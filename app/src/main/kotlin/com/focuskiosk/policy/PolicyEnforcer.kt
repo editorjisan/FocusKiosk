@@ -485,8 +485,8 @@ object PolicyEnforcer {
         // Persist explicit set of blocked packages so restoration never has to guess
         SecureStorage.setBlockedPackages(context, toBlock.toSet())
 
-        // 3. FAST-LOCK: Immediately suspend all targeted packages in ONE bulk IPC call (< 30ms)!
-        // If an upload window is currently active, avoid suspending designated creator apps.
+        // 3. FAST-LOCK: Suspend and Hide all targeted packages
+        // If an upload window is currently active, avoid suspending/hiding designated creator apps.
         val isWindowActive = WorkWindowScheduler.isWindowActive(context)
         val workPackages = if (isWindowActive) WorkWindowScheduler.getAppsToUnlock(context) else emptySet()
         val appsToSuspend = toBlock.filter { it !in workPackages }
@@ -499,14 +499,12 @@ object PolicyEnforcer {
         // 3b. AUTOMATIC NOTIFICATION SUPPRESSION: Revoke notification permissions & purge shade
         suppressNotifications(context, appsToSuspend)
 
-        // 4. DESKTOP ICON INTEGRITY GUARANTEE:
-        // We deliberately DO NOT call dpm.setApplicationHidden(admin, pkg, true).
-        // On Android OEM launchers (HiOS, XOS, MIUI, OneUI, ColorOS, etc.), hiding an app permanently
-        // wipes its shortcut icon, folders, and widgets from the home screen grid. When unhidden later,
-        // launchers do not recreate the shortcuts, leading users to believe their apps were deleted.
-        // Calling setPackagesSuspended(true) completely pauses, freezes, and locks the apps at the OS level
-        // while preserving 100% of user desktop layouts and shortcuts intact!
-        Log.i(TAG, "Preserving desktop shortcuts (setApplicationHidden skipped to avoid OEM icon wipe).")
+        // 4. COMPLETE APP HIDING:
+        // Set application hidden so apps completely disappear from app drawer and launcher
+        safeToSuspend.forEach { pkg ->
+            hideApplication(context, pkg)
+        }
+        Log.i(TAG, "Applied setApplicationHidden(true) to ${safeToSuspend.size} packages.")
 
         // 5. Ensure sideloading and manual APK installs are NEVER blocked.
         unblockAppInstalls(context)

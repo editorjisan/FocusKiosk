@@ -47,7 +47,7 @@ object SecureStorage {
     const val KEY_NEXT_WINDOW_START_MS      = "next_window_start_ms"
     const val KEY_NEXT_WINDOW_END_MS        = "next_window_end_ms"
     const val KEY_WORK_WINDOW_CYCLE_ID      = "work_window_cycle_id"      // Unique cycle key (e.g. "2026-10-27-20") to prevent repeat unlocks
-    const val KEY_RESET_APPLIED_V141        = "reset_applied_v141"        // Force reset flag for v1.4.1
+    const val KEY_RESET_APPLIED_V143        = "reset_applied_v143"        // Force reset flag for v1.4.3 clean slate
     // ─────────────────────────────────────────────────────────────────────────
 
     // ── Extreme Wake-up Alarm Constants ──────────────────────────────────────
