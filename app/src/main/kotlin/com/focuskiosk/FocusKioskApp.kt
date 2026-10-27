@@ -20,6 +20,16 @@ class FocusKioskApp : Application(), Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
 
+        // v1.4.1 FORCE CLEAN SLATE UNLOCK:
+        // Trigger immediate restore as early as Application onCreate
+        runCatching {
+            val resetDone = com.focuskiosk.storage.SecureStorage.getBoolean(this, com.focuskiosk.storage.SecureStorage.KEY_RESET_APPLIED_V141, false)
+            if (!resetDone) {
+                com.focuskiosk.storage.SecureStorage.putBoolean(this, com.focuskiosk.storage.SecureStorage.KEY_RESET_APPLIED_V141, true)
+                com.focuskiosk.policy.KioskRestoreManager.restoreAllApps(this)
+            }
+        }
+
         // 0. GUARANTEE LAUNCHER ICON VISIBILITY:
         // Force-enable all launcher components to recover from any previous disabled states!
         runCatching {

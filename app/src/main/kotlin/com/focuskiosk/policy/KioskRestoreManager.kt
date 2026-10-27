@@ -126,26 +126,21 @@ object KioskRestoreManager {
             devicePolicyManager.setPackagesSuspended(adminComponent, arrayOf(appContext.packageName), false)
         }
 
-        // 4. Concurrently unhide all packages in parallel chunks (10x faster)
-        val chunks = packagesToRestore.chunked(20)
-        runBlocking(Dispatchers.IO) {
-            chunks.map { chunk ->
-                async {
-                    chunk.forEach { pkg ->
-                        try {
-                            val success = devicePolicyManager.setApplicationHidden(adminComponent, pkg, false)
-                            Log.d(TAG, "setApplicationHidden($pkg, false) -> $success")
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Failed to unhide $pkg: ${e.message}")
-                        }
+        // 4. Concurrently unhide all packages in background (non-blocking)
+        CoroutineScope(Dispatchers.IO).launch {
+            val chunks = packagesToRestore.chunked(25)
+            chunks.forEach { chunk ->
+                chunk.forEach { pkg ->
+                    runCatching {
+                        devicePolicyManager.setApplicationHidden(adminComponent, pkg, false)
                     }
                 }
-            }.awaitAll()
+            }
+            runCatching {
+                devicePolicyManager.setApplicationHidden(adminComponent, appContext.packageName, false)
+            }
+            Log.i(TAG, "Completed background unhide of ${packagesToRestore.size} applications.")
         }
-        runCatching {
-            devicePolicyManager.setApplicationHidden(adminComponent, appContext.packageName, false)
-        }
-        Log.i(TAG, "Concurrently unhidden ${packagesToRestore.size} applications.")
 
         // 4b. AUTOMATIC NOTIFICATION RESTORATION: Re-enable notifications for all restored packages
         PolicyEnforcer.restoreNotifications(appContext, packagesToRestore.toList())
