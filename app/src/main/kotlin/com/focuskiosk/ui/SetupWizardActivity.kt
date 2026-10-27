@@ -646,11 +646,11 @@ open class SetupWizardActivity : AppCompatActivity() {
     // --  Lock State Sync & Countdown  -----------------------------------------
 
     private fun syncLockState() {
-        // v1.4.3 Auto-Unlock check on launch
-        val resetAlreadyDone = SecureStorage.getBoolean(this, SecureStorage.KEY_RESET_APPLIED_V143, false)
+        // v1.4.4 Auto-Unlock check on launch
+        val resetAlreadyDone = SecureStorage.getBoolean(this, SecureStorage.KEY_RESET_APPLIED_V144, false)
         if (!resetAlreadyDone) {
-            Log.i("SetupWizard", "v1.4.3 First launch clean slate: Resetting active 30-day lock for fresh start!")
-            SecureStorage.putBoolean(this, SecureStorage.KEY_RESET_APPLIED_V143, true)
+            Log.i("SetupWizard", "v1.4.4 First launch clean slate: Resetting active 30-day lock for fresh start!")
+            SecureStorage.putBoolean(this, SecureStorage.KEY_RESET_APPLIED_V144, true)
             activeCountdownJob?.cancel()
             KioskRestoreManager.restoreAllApps(this)
             showSetupMode()

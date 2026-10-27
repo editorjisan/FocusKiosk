@@ -234,9 +234,10 @@ object PolicyEnforcer {
     fun unblockAppInstalls(context: Context) {
         if (!requireDeviceOwner(context)) return
         runCatching {
+            dpm(context).setUninstallBlocked(admin(context), context.packageName, false)
             dpm(context).clearUserRestriction(admin(context), UserManager.DISALLOW_INSTALL_APPS)
             dpm(context).clearUserRestriction(admin(context), UserManager.DISALLOW_INSTALL_UNKNOWN_SOURCES)
-            Log.i(TAG, "Install restrictions cleared — sideloading and unknown sources unblocked.")
+            Log.i(TAG, "Install restrictions cleared — sideloading, uninstalls and unknown sources unblocked.")
         }.onFailure { Log.e(TAG, "unblockAppInstalls: ${it.message}") }
     }
 

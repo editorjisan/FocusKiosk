@@ -151,12 +151,13 @@ object KioskRestoreManager {
 
         // 5. Restore user restrictions (unblock all installs, ADB, factory reset, unknown sources)
         runCatching {
+            devicePolicyManager.setUninstallBlocked(adminComponent, appContext.packageName, false)
             devicePolicyManager.clearUserRestriction(adminComponent, UserManager.DISALLOW_INSTALL_APPS)
             devicePolicyManager.clearUserRestriction(adminComponent, UserManager.DISALLOW_INSTALL_UNKNOWN_SOURCES)
             devicePolicyManager.clearUserRestriction(adminComponent, UserManager.DISALLOW_DEBUGGING_FEATURES)
             devicePolicyManager.clearUserRestriction(adminComponent, UserManager.DISALLOW_FACTORY_RESET)
             devicePolicyManager.clearUserRestriction(adminComponent, UserManager.DISALLOW_APPS_CONTROL)
-            Log.i(TAG, "All anti-tamper, sideloading, and install restrictions cleared.")
+            Log.i(TAG, "All anti-tamper, sideloading, uninstall and install restrictions cleared.")
         }.onFailure { Log.w(TAG, "Error clearing user restrictions: ${it.message}") }
 
         // Cancel countdown notification immediately

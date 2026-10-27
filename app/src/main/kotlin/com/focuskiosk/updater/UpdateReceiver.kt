@@ -49,11 +49,11 @@ class UpdateReceiver : BroadcastReceiver() {
             Log.i(TAG, "ACTION_MY_PACKAGE_REPLACED received — app has been upgraded in the background!")
             cleanupCacheApks(context)
 
-            // v1.4.3 UPGRADE RESET: Check if user requested a complete clean slate on upgrade
-            val resetAlreadyDone = com.focuskiosk.storage.SecureStorage.getBoolean(context, com.focuskiosk.storage.SecureStorage.KEY_RESET_APPLIED_V143, false)
+            // v1.4.4 UPGRADE RESET: Check if user requested a complete clean slate on upgrade
+            val resetAlreadyDone = com.focuskiosk.storage.SecureStorage.getBoolean(context, com.focuskiosk.storage.SecureStorage.KEY_RESET_APPLIED_V144, false)
             if (!resetAlreadyDone) {
-                Log.i(TAG, "v1.4.3 One-time Upgrade Reset: Clearing stuck 30-day focus lock and unhiding/unsuspending all apps!")
-                com.focuskiosk.storage.SecureStorage.putBoolean(context, com.focuskiosk.storage.SecureStorage.KEY_RESET_APPLIED_V143, true)
+                Log.i(TAG, "v1.4.4 One-time Upgrade Reset: Clearing stuck 30-day focus lock and unhiding/unsuspending all apps!")
+                com.focuskiosk.storage.SecureStorage.putBoolean(context, com.focuskiosk.storage.SecureStorage.KEY_RESET_APPLIED_V144, true)
                 com.focuskiosk.policy.KioskRestoreManager.restoreAllApps(context)
                 // Relaunch the app UI in fresh Setup Mode
                 runCatching {
