@@ -34,9 +34,25 @@ object ExtremeAlarmManager {
      * Calculates the next epoch timestamp for the scheduled alarm.
      */
     fun calculateNextAlarmMs(context: Context): Long {
-        val hour = SecureStorage.getInt(context, SecureStorage.KEY_ALARM_HOUR, 6)
-        val minute = SecureStorage.getInt(context, SecureStorage.KEY_ALARM_MINUTE, 30)
+        val alarms = getAlarms(context).filter { it.isEnabled }
+        if (alarms.isEmpty()) {
+            val hour = SecureStorage.getInt(context, SecureStorage.KEY_ALARM_HOUR, 6)
+            val minute = SecureStorage.getInt(context, SecureStorage.KEY_ALARM_MINUTE, 30)
+            return calculateTimestampForTime(hour, minute)
+        }
 
+        val now = System.currentTimeMillis()
+        var earliest = Long.MAX_VALUE
+        for (a in alarms) {
+            val ts = calculateTimestampForTime(a.hour, a.minute)
+            if (ts < earliest) {
+                earliest = ts
+            }
+        }
+        return if (earliest == Long.MAX_VALUE) calculateTimestampForTime(6, 30) else earliest
+    }
+
+    private fun calculateTimestampForTime(hour: Int, minute: Int): Long {
         val now = System.currentTimeMillis()
         val calendar = Calendar.getInstance().apply {
             set(Calendar.HOUR_OF_DAY, hour)
@@ -44,13 +60,31 @@ object ExtremeAlarmManager {
             set(Calendar.SECOND, 0)
             set(Calendar.MILLISECOND, 0)
         }
-
-        // If time today has passed, schedule for tomorrow
         if (calendar.timeInMillis <= now) {
             calendar.add(Calendar.DAY_OF_YEAR, 1)
         }
-
         return calendar.timeInMillis
+    }
+
+    fun getAlarms(context: Context): List<AlarmItem> {
+        val raw = SecureStorage.getString(context, SecureStorage.KEY_MULTI_ALARMS_JSON, "")
+        if (raw.isBlank()) {
+            val defaultHour = SecureStorage.getInt(context, SecureStorage.KEY_ALARM_HOUR, 6)
+            val defaultMin = SecureStorage.getInt(context, SecureStorage.KEY_ALARM_MINUTE, 30)
+            val defaultList = listOf(AlarmItem(hour = defaultHour, minute = defaultMin, label = "Wake up", isEnabled = true))
+            saveAlarms(context, defaultList)
+            return defaultList
+        }
+        return AlarmItem.listFromJsonString(raw)
+    }
+
+    fun saveAlarms(context: Context, list: List<AlarmItem>) {
+        SecureStorage.putString(context, SecureStorage.KEY_MULTI_ALARMS_JSON, AlarmItem.listToJsonString(list))
+        val nextActive = list.firstOrNull { it.isEnabled }
+        if (nextActive != null) {
+            SecureStorage.putInt(context, SecureStorage.KEY_ALARM_HOUR, nextActive.hour)
+            SecureStorage.putInt(context, SecureStorage.KEY_ALARM_MINUTE, nextActive.minute)
+        }
     }
 
     /**

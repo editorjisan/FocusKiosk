@@ -122,7 +122,7 @@ open class SetupWizardActivity : AppCompatActivity() {
             }
         })
 
-        // Observe soft keyboard visibility: hide controlsPanel and headers to give rvSelectApps 100% of space
+        // Observe soft keyboard visibility: hide controlsPanel and headers to give rvSelectApps space when keyboard opens
         ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, insets ->
             val imeVisible = insets.isVisible(WindowInsetsCompat.Type.ime())
             if (imeVisible) {
@@ -130,11 +130,6 @@ open class SetupWizardActivity : AppCompatActivity() {
                 binding.otaUpdateCard.visibility = View.GONE
                 binding.headerTitleLayout.visibility = View.GONE
                 binding.tvCancelSearch.visibility = View.VISIBLE
-            } else if (!binding.etSearchApps.hasFocus() && binding.etSearchApps.text.isNullOrEmpty()) {
-                binding.controlsPanel.visibility = View.VISIBLE
-                binding.otaUpdateCard.visibility = View.VISIBLE
-                binding.headerTitleLayout.visibility = View.VISIBLE
-                binding.tvCancelSearch.visibility = View.GONE
             }
             insets
         }
@@ -201,24 +196,31 @@ open class SetupWizardActivity : AppCompatActivity() {
     // --  App list  ------------------------------------------------------------
 
     private fun setupList() {
-        selectAdapter = AppSelectAdapter()
+        selectAdapter = AppSelectAdapter { count ->
+            binding.tvSelectedCount.text = "$count apps selected"
+        }
         val lm = LinearLayoutManager(this)
         binding.rvSelectApps.layoutManager = lm
         binding.rvSelectApps.adapter = selectAdapter
         binding.rvSelectApps.setHasFixedSize(false)
         binding.rvSelectApps.isNestedScrollingEnabled = true
 
-        // Dismiss keyboard and release focus when dragging/scrolling results
+        binding.btnSaveAppPreset.setOnClickListener {
+            AppPresetManager.showSavePresetDialog(this, selectAdapter.getSelectedPackages()) { _ -> }
+        }
+
+        binding.btnLoadAppPreset.setOnClickListener {
+            AppPresetManager.showLoadPresetDialog(this) { pkgs ->
+                selectAdapter.setSelectedPackages(pkgs)
+            }
+        }
+
+        // Dismiss keyboard when dragging results without auto-closing search mode
         binding.rvSelectApps.addOnScrollListener(object : RecyclerView.OnScrollListener() {
             override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
                 if (newState != RecyclerView.SCROLL_STATE_IDLE) {
                     val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager
                     imm?.hideSoftInputFromWindow(binding.etSearchApps.windowToken, 0)
-                    binding.etSearchApps.clearFocus()
-                    binding.root.requestFocus()
-                    if (binding.etSearchApps.text.isNullOrEmpty()) {
-                        setSearchModeActive(false)
-                    }
                 }
             }
 
@@ -226,25 +228,9 @@ open class SetupWizardActivity : AppCompatActivity() {
                 if (dy != 0 && binding.etSearchApps.hasFocus()) {
                     val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager
                     imm?.hideSoftInputFromWindow(binding.etSearchApps.windowToken, 0)
-                    binding.etSearchApps.clearFocus()
-                    binding.root.requestFocus()
                 }
             }
         })
-
-        // Dismiss keyboard and focus root on touch to avoid spurious auto-focus
-        binding.rvSelectApps.setOnTouchListener { _, _ ->
-            if (binding.etSearchApps.hasFocus()) {
-                val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager
-                imm?.hideSoftInputFromWindow(binding.etSearchApps.windowToken, 0)
-                binding.etSearchApps.clearFocus()
-                binding.root.requestFocus()
-                if (binding.etSearchApps.text.isNullOrEmpty()) {
-                    setSearchModeActive(false)
-                }
-            }
-            false
-        }
     }
 
     private fun setSearchModeActive(active: Boolean) {
@@ -829,30 +815,31 @@ open class SetupWizardActivity : AppCompatActivity() {
             binding.layoutAlarmConfig.visibility = if (isChecked) View.VISIBLE else View.GONE
             if (isChecked) {
                 com.focuskiosk.alarm.ExtremeAlarmManager.scheduleAlarm(this)
-                Toast.makeText(this, "Extreme Alarm Enabled", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Extreme Alarms Enabled", Toast.LENGTH_SHORT).show()
             } else {
                 com.focuskiosk.alarm.ExtremeAlarmManager.cancelAlarm(this)
-                Toast.makeText(this, "Extreme Alarm Disabled", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Extreme Alarms Disabled", Toast.LENGTH_SHORT).show()
             }
         }
 
-        binding.btnPickAlarmTime.setOnClickListener {
-            val currentHour = SecureStorage.getInt(this, SecureStorage.KEY_ALARM_HOUR, 6)
-            val currentMinute = SecureStorage.getInt(this, SecureStorage.KEY_ALARM_MINUTE, 30)
-            android.app.TimePickerDialog(
+        binding.btnAddAlarm.setOnClickListener {
+            val tpd = android.app.TimePickerDialog(
                 this,
                 { _, h, m ->
-                    SecureStorage.putInt(this, SecureStorage.KEY_ALARM_HOUR, h)
-                    SecureStorage.putInt(this, SecureStorage.KEY_ALARM_MINUTE, m)
+                    val currentList = com.focuskiosk.alarm.ExtremeAlarmManager.getAlarms(this).toMutableList()
+                    currentList.add(com.focuskiosk.alarm.AlarmItem(hour = h, minute = m, label = "Wake up", isEnabled = true))
+                    com.focuskiosk.alarm.ExtremeAlarmManager.saveAlarms(this, currentList)
                     updateAlarmSummary()
                     if (binding.switchExtremeAlarm.isChecked) {
                         com.focuskiosk.alarm.ExtremeAlarmManager.scheduleAlarm(this)
                     }
+                    Toast.makeText(this, "Alarm added!", Toast.LENGTH_SHORT).show()
                 },
-                currentHour,
-                currentMinute,
+                6,
+                30,
                 false
-            ).show()
+            )
+            tpd.show()
         }
 
         binding.btnAlarmCredentials.setOnClickListener {
@@ -874,16 +861,66 @@ open class SetupWizardActivity : AppCompatActivity() {
     }
 
     private fun updateAlarmSummary() {
-        val h = SecureStorage.getInt(this, SecureStorage.KEY_ALARM_HOUR, 6)
-        val m = SecureStorage.getInt(this, SecureStorage.KEY_ALARM_MINUTE, 30)
+        val alarms = com.focuskiosk.alarm.ExtremeAlarmManager.getAlarms(this)
+        val activeCount = alarms.count { it.isEnabled }
         val userId = SecureStorage.getString(this, SecureStorage.KEY_ALARM_USER_ID, "jisan")
-        val amPm = if (h >= 12) "PM" else "AM"
-        val hour12 = if (h % 12 == 0) 12 else h % 12
-        val timeStr = String.format(Locale.getDefault(), "%d:%02d %s", hour12, m, amPm)
-
-        binding.btnPickAlarmTime.text = "Time: $timeStr"
         binding.btnAlarmCredentials.text = "PC ID: $userId"
-        binding.tvAlarmSummary.text = "Daily at $timeStr (PC Code Verification)"
+        binding.tvAlarmSummary.text = "$activeCount active alarm${if (activeCount == 1) "" else "s"} (PC Dismissal)"
+
+        // Render dynamic Apple-style alarm list
+        binding.containerAlarmItems.removeAllViews()
+        for (alarm in alarms) {
+            val h12 = if (alarm.hour % 12 == 0) 12 else alarm.hour % 12
+            val amPm = if (alarm.hour >= 12) "PM" else "AM"
+            val timeText = String.format(Locale.getDefault(), "%d:%02d %s", h12, alarm.minute, amPm)
+
+            val row = android.widget.LinearLayout(this).apply {
+                orientation = android.widget.LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                setPadding(8, 4, 8, 4)
+            }
+
+            val tvTime = android.widget.TextView(this).apply {
+                layoutParams = android.widget.LinearLayout.LayoutParams(0, android.view.ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                text = timeText
+                setTextColor(if (alarm.isEnabled) Color.WHITE else Color.parseColor("#8E8E93"))
+                textSize = 15f
+                typeface = android.graphics.Typeface.DEFAULT_BOLD
+            }
+
+            val sw = com.google.android.material.switchmaterial.SwitchMaterial(this).apply {
+                isChecked = alarm.isEnabled
+                thumbTintList = android.content.res.ColorStateList.valueOf(Color.WHITE)
+                trackTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#007AFF"))
+                setOnCheckedChangeListener { _, checked ->
+                    val updated = alarms.map { if (it.id == alarm.id) it.copy(isEnabled = checked) else it }
+                    com.focuskiosk.alarm.ExtremeAlarmManager.saveAlarms(this@SetupWizardActivity, updated)
+                    updateAlarmSummary()
+                    if (binding.switchExtremeAlarm.isChecked) {
+                        com.focuskiosk.alarm.ExtremeAlarmManager.scheduleAlarm(this@SetupWizardActivity)
+                    }
+                }
+            }
+
+            val btnDelete = android.widget.ImageView(this).apply {
+                setImageResource(android.R.drawable.ic_menu_delete)
+                setColorFilter(Color.parseColor("#FF3B30"))
+                setPadding(12, 0, 0, 0)
+                setOnClickListener {
+                    val updated = alarms.filter { it.id != alarm.id }
+                    com.focuskiosk.alarm.ExtremeAlarmManager.saveAlarms(this@SetupWizardActivity, updated)
+                    updateAlarmSummary()
+                    if (binding.switchExtremeAlarm.isChecked) {
+                        com.focuskiosk.alarm.ExtremeAlarmManager.scheduleAlarm(this@SetupWizardActivity)
+                    }
+                }
+            }
+
+            row.addView(tvTime)
+            row.addView(sw)
+            row.addView(btnDelete)
+            binding.containerAlarmItems.addView(row)
+        }
     }
 
     private fun showAlarmCredentialsDialog() {

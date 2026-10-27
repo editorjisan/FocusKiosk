@@ -1,8 +1,8 @@
 {
-  "versionCode": 28,
-  "versionName": "1.4.1",
-  "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.4.1/FocusKiosk.apk",
+  "versionCode": 29,
+  "versionName": "1.4.2",
+  "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.4.2/FocusKiosk.apk",
   "sha256": "",
-  "releaseNotes": "v1.4.1: Instant non-blocking clean-slate unlock on Application launch, fixes UI hang on upgrade, early upload done button, and live web alarm.",
+  "releaseNotes": "v1.4.2: Apple HIG UI polish, fixed search scrolling jump bug, custom App Presets, multiple Extreme Alarms with individual toggles & custom ring time web verification.",
   "minSdkVersion": 28
 }

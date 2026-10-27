@@ -58,6 +58,8 @@ object SecureStorage {
     const val KEY_ALARM_PASSWORD           = "alarm_password"           // default "1234"
     const val KEY_NEXT_ALARM_TIMESTAMP_MS  = "next_alarm_timestamp_ms"
     const val KEY_ALARM_RINGING            = "alarm_ringing"
+    const val KEY_MULTI_ALARMS_JSON        = "multi_alarms_json"        // JSON list of AlarmItems
+    const val KEY_SAVED_APP_PRESETS_JSON   = "saved_app_presets_json"   // JSON map of presetName -> packageSet
     // ─────────────────────────────────────────────────────────────────────────
 
     @Volatile private var instance: SharedPreferences? = null

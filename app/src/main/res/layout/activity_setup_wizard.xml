@@ -53,15 +53,8 @@
                 android:id="@+id/tvVersionInfo"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="v1.2.5"
-                android:textColor="#8E8E93"
-                android:textSize="11sp"
-                android:fontFamily="sans-serif"
-                android:background="@drawable/bg_ios_card"
-                android:paddingStart="8dp"
-                android:paddingEnd="8dp"
-                android:paddingTop="3dp"
-                android:paddingBottom="3dp" />
+                android:text=""
+                android:visibility="gone" />
         </LinearLayout>
 
         <TextView
@@ -145,13 +138,8 @@
 
             <ProgressBar
                 android:id="@+id/progressBarUpdate"
-                style="?android:attr/progressBarStyleHorizontal"
                 android:layout_width="match_parent"
-                android:layout_height="4dp"
-                android:layout_marginTop="8dp"
-                android:max="100"
-                android:progress="0"
-                android:progressTint="#007AFF"
+                android:layout_height="0dp"
                 android:visibility="gone" />
 
         </LinearLayout>
@@ -227,19 +215,66 @@
             android:visibility="gone" />
     </LinearLayout>
 
+    <!-- ── App Selection & Presets Header ─────────────────────────────── -->
+    <LinearLayout
+        android:id="@+id/presetBarLayout"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginTop="6dp"
+        app:layout_constraintTop_toBottomOf="@id/searchRowLayout"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <TextView
+            android:id="@+id/tvSelectedCount"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="0 apps selected"
+            android:textColor="#8E8E93"
+            android:textSize="12sp"
+            android:fontFamily="sans-serif-medium" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnSaveAppPreset"
+            style="@style/Widget.MaterialComponents.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="32dp"
+            android:text="💾 Save Preset"
+            android:textSize="11sp"
+            android:textColor="#007AFF"
+            android:paddingStart="6dp"
+            android:paddingEnd="6dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnLoadAppPreset"
+            style="@style/Widget.MaterialComponents.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="32dp"
+            android:text="📂 Presets"
+            android:textSize="11sp"
+            android:textColor="#007AFF"
+            android:paddingStart="6dp"
+            android:paddingEnd="6dp" />
+    </LinearLayout>
+
     <!-- ── App List (Scrollable between search row and controls) ──────────── -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/rvSelectApps"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:layout_marginTop="6dp"
+        android:layout_marginTop="4dp"
         android:layout_marginBottom="6dp"
         android:clipToPadding="false"
         android:paddingTop="2dp"
         android:paddingBottom="4dp"
         android:focusable="false"
         android:focusableInTouchMode="false"
-        app:layout_constraintTop_toBottomOf="@id/searchRowLayout"
+        app:layout_constraintTop_toBottomOf="@id/presetBarLayout"
         app:layout_constraintBottom_toTopOf="@id/controlsPanel"
         app:layout_goneMarginBottom="0dp"
         app:layout_constraintStart_toStartOf="parent"
@@ -886,7 +921,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Extreme Wake-up Alarm"
+                    android:text="Extreme Wake-up Alarms"
                     android:textColor="#FFFFFF"
                     android:textSize="13sp" />
 
@@ -894,7 +929,7 @@
                     android:id="@+id/tvAlarmSummary"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Daily at 6:30 AM (PC Code Verification)"
+                    android:text="Alarms configured (PC Code Verification)"
                     android:textColor="#8E8E93"
                     android:textSize="11sp" />
             </LinearLayout>
@@ -908,7 +943,7 @@
                 app:trackTint="#007AFF" />
         </LinearLayout>
 
-        <!-- Alarm Configuration Details -->
+        <!-- Alarm Configuration Details (Multiple Alarms Apple-style Manager) -->
         <LinearLayout
             android:id="@+id/layoutAlarmConfig"
             android:layout_width="match_parent"
@@ -918,6 +953,13 @@
             android:visibility="visible">
 
             <LinearLayout
+                android:id="@+id/containerAlarmItems"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:layout_marginBottom="4dp" />
+
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
@@ -925,12 +967,12 @@
                 android:layout_marginBottom="4dp">
 
                 <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnPickAlarmTime"
+                    android:id="@+id/btnAddAlarm"
                     style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                     android:layout_width="0dp"
                     android:layout_weight="1"
                     android:layout_height="32dp"
-                    android:text="Time: 6:30 AM"
+                    android:text="➕ Add Alarm"
                     android:textSize="10sp"
                     android:textColor="#007AFF"
                     android:layout_marginEnd="4dp"
@@ -948,6 +990,13 @@
                     android:textColor="#007AFF"
                     app:strokeColor="#007AFF"
                     app:cornerRadius="16dp" />
+
+                <!-- Hidden legacy button keeping view binding intact -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnPickAlarmTime"
+                    android:layout_width="0dp"
+                    android:layout_height="0dp"
+                    android:visibility="gone" />
             </LinearLayout>
 
             <com.google.android.material.button.MaterialButton

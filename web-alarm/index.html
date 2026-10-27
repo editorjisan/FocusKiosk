@@ -295,11 +295,25 @@
       <div class="portal-active-header">
         <div class="portal-user-tag">
           User: <strong id="displayUserId">jisan</strong><br>
-          Alarm: <strong id="displayAlarmTime">06:30 AM</strong>
+          Active Alarm: <strong id="displayAlarmTime">06:30 AM</strong>
         </div>
         <div id="statusBadge" class="status-badge unlocked">
           <span id="statusDot">●</span> <span id="statusText">Active</span>
         </div>
+      </div>
+
+      <!-- Quick Alarm Switcher / Selector in Portal -->
+      <div style="background: #2C2C2E; border-radius: 12px; padding: 12px 14px; margin-bottom: 16px;">
+        <label for="portalAlarmTime" style="margin-bottom: 6px; display: flex; justify-content: space-between;">
+          <span>Ringing Alarm Time</span>
+          <span style="color: var(--accent-blue); text-transform: none; cursor: pointer;" onclick="document.getElementById('portalAlarmTime').focus()">Change ✎</span>
+        </label>
+        <div style="display: flex; gap: 8px;">
+          <input type="time" id="portalAlarmTime" style="flex: 1; height: 42px;" onchange="handlePortalTimeChange(this.value)">
+        </div>
+        <p style="font-size: 11px; color: var(--text-secondary); margin-top: 6px;">
+          If multiple alarms are set on your phone, select the exact time of the alarm currently ringing.
+        </p>
       </div>
 
       <!-- Unlocked Code Panel -->
@@ -403,8 +417,24 @@
 
       document.getElementById('loginView').classList.add('hidden');
       document.getElementById('portalView').classList.remove('hidden');
+      document.getElementById('portalAlarmTime').value = timeVal;
 
       startPortalUpdates();
+    }
+
+    function handlePortalTimeChange(val) {
+      if (!val) return;
+      const [h, m] = val.split(':').map(Number);
+      alarmHour = h;
+      alarmMinute = m;
+      localStorage.setItem('fk_alarm_time', val);
+
+      const amPm = alarmHour >= 12 ? 'PM' : 'AM';
+      const h12 = alarmHour % 12 === 0 ? 12 : alarmHour % 12;
+      const mStr = String(alarmMinute).padStart(2, '0');
+      document.getElementById('displayAlarmTime').textContent = `${h12}:${mStr} ${amPm}`;
+
+      updatePortalState();
     }
 
     function handleLogout() {

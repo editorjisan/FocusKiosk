@@ -16,7 +16,9 @@ import java.util.Locale
  * Checkable Apple HIG list adapter with real-time search filtering.
  * Maintains persistent package selection state across search queries.
  */
-class AppSelectAdapter : RecyclerView.Adapter<AppSelectAdapter.VH>() {
+class AppSelectAdapter(
+    private val onSelectionChanged: ((count: Int) -> Unit)? = null
+) : RecyclerView.Adapter<AppSelectAdapter.VH>() {
 
     private val allApps = mutableListOf<AppInfo>()
     private val displayedApps = mutableListOf<AppInfo>()
@@ -27,6 +29,13 @@ class AppSelectAdapter : RecyclerView.Adapter<AppSelectAdapter.VH>() {
         allApps.clear()
         allApps.addAll(list)
         applyFilter()
+    }
+
+    fun setSelectedPackages(packages: Set<String>) {
+        selected.clear()
+        selected.addAll(packages)
+        notifyDataSetChanged()
+        onSelectionChanged?.invoke(selected.size)
     }
 
     fun filter(query: CharSequence) {
@@ -76,6 +85,7 @@ class AppSelectAdapter : RecyclerView.Adapter<AppSelectAdapter.VH>() {
                     selected.add(app.packageName)
                 }
                 b.cbSelected.isChecked = app.packageName in selected
+                onSelectionChanged?.invoke(selected.size)
                 Unit
             }
             b.root.setOnClickListener(toggle)

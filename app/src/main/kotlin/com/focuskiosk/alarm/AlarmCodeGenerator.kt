@@ -75,19 +75,27 @@ object AlarmCodeGenerator {
 
         val userId = SecureStorage.getString(context, SecureStorage.KEY_ALARM_USER_ID, "jisan")
         val password = SecureStorage.getString(context, SecureStorage.KEY_ALARM_PASSWORD, "1234")
-        val alarmHour = SecureStorage.getInt(context, SecureStorage.KEY_ALARM_HOUR, 6)
-        val alarmMinute = SecureStorage.getInt(context, SecureStorage.KEY_ALARM_MINUTE, 30)
 
+        val alarms = ExtremeAlarmManager.getAlarms(context)
         val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-        val todayCode = generateRawCode(userId, password, todayStr, alarmHour, alarmMinute)
-        if (cleanCode == todayCode) return true
-
-        // Also check yesterday's date in case the user went to sleep past midnight or alarm rings overnight
         val cal = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -1) }
         val yesterdayStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(cal.time)
-        val yesterdayCode = generateRawCode(userId, password, yesterdayStr, alarmHour, alarmMinute)
 
-        return cleanCode == yesterdayCode
+        // Validate entered code against any active configured alarm times
+        for (alarm in alarms) {
+            val todayCode = generateRawCode(userId, password, todayStr, alarm.hour, alarm.minute)
+            if (cleanCode == todayCode) return true
+
+            val yesterdayCode = generateRawCode(userId, password, yesterdayStr, alarm.hour, alarm.minute)
+            if (cleanCode == yesterdayCode) return true
+        }
+
+        // Fallback check against legacy single alarm
+        val alarmHour = SecureStorage.getInt(context, SecureStorage.KEY_ALARM_HOUR, 6)
+        val alarmMinute = SecureStorage.getInt(context, SecureStorage.KEY_ALARM_MINUTE, 30)
+        val fallbackToday = generateRawCode(userId, password, todayStr, alarmHour, alarmMinute)
+        val fallbackYesterday = generateRawCode(userId, password, yesterdayStr, alarmHour, alarmMinute)
+        return cleanCode == fallbackToday || cleanCode == fallbackYesterday
     }
 
     /**
