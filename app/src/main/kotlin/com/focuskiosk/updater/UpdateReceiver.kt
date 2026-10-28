@@ -49,41 +49,16 @@ class UpdateReceiver : BroadcastReceiver() {
             Log.i(TAG, "ACTION_MY_PACKAGE_REPLACED received — app has been upgraded in the background!")
             cleanupCacheApks(context)
 
-            // v1.4.4 UPGRADE RESET: Check if user requested a complete clean slate on upgrade
-            val resetAlreadyDone = com.focuskiosk.storage.SecureStorage.getBoolean(context, com.focuskiosk.storage.SecureStorage.KEY_RESET_APPLIED_V144, false)
-            if (!resetAlreadyDone) {
-                Log.i(TAG, "v1.4.4 One-time Upgrade Reset: Clearing stuck 30-day focus lock and unhiding/unsuspending all apps!")
-                com.focuskiosk.storage.SecureStorage.putBoolean(context, com.focuskiosk.storage.SecureStorage.KEY_RESET_APPLIED_V144, true)
-                com.focuskiosk.policy.KioskRestoreManager.restoreAllApps(context)
-                // Relaunch the app UI in fresh Setup Mode
-                runCatching {
-                    val launchIntent = Intent(context, com.focuskiosk.MainActivity::class.java).apply {
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                    }
-                    context.startActivity(launchIntent)
-                }
-                return
-            }
+            // ALWAYS FORCE COMPLETE UNLOCK ON UPGRADE:
+            Log.i(TAG, "Upgrade complete: Unconditionally resetting all locks and unsuspending/unhiding all apps!")
+            com.focuskiosk.policy.KioskRestoreManager.restoreAllApps(context)
 
-            val isLockActive = com.focuskiosk.storage.SecureStorage.isLockActive(context)
-            val unlockTs = com.focuskiosk.storage.SecureStorage.getUnlockTimestampMs(context)
-            val now = System.currentTimeMillis()
-
-            if (!isLockActive || now >= unlockTs) {
-                Log.i(TAG, "Post-upgrade: lock is inactive or expired ($isLockActive, $now >= $unlockTs). Restoring all apps immediately!")
-                com.focuskiosk.policy.KioskRestoreManager.restoreAllApps(context)
-                // Relaunch the app UI so the user sees the updated version immediately
-                runCatching {
-                    val launchIntent = Intent(context, com.focuskiosk.MainActivity::class.java).apply {
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                    }
-                    context.startActivity(launchIntent)
+            // Relaunch the app UI in fresh Setup Mode
+            runCatching {
+                val launchIntent = Intent(context, com.focuskiosk.MainActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
                 }
-            } else {
-                Log.i(TAG, "Post-upgrade: lock is still active. Resuming countdown service and fail-safes.")
-                com.focuskiosk.service.FocusCountdownService.start(context, unlockTs)
-                com.focuskiosk.policy.KioskRestoreManager.scheduleFailSafe(context, unlockTs)
-                com.focuskiosk.policy.WorkWindowScheduler.checkAndSyncWindow(context)
+                context.startActivity(launchIntent)
             }
             return
         }

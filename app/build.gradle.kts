@@ -12,8 +12,8 @@ android {
         applicationId = "com.focuskiosk"
         minSdk = 28
         targetSdk = 34
-        versionCode = 31
-        versionName = "1.4.4"
+        versionCode = 32
+        versionName = "1.4.5"
     }
 
     signingConfigs {

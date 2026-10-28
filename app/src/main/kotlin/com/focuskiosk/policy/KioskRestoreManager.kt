@@ -123,12 +123,22 @@ object KioskRestoreManager {
             }
         }
 
+        // 3b. FAST-UNHIDE: Synchronously unhide all packages immediately to ensure apps reappear!
+        packagesToRestore.forEach { pkg ->
+            runCatching {
+                devicePolicyManager.setApplicationHidden(adminComponent, pkg, false)
+            }
+        }
+        runCatching {
+            devicePolicyManager.setApplicationHidden(adminComponent, appContext.packageName, false)
+        }
+
         // Explicit guarantee: ensure our own app is never left suspended
         runCatching {
             devicePolicyManager.setPackagesSuspended(adminComponent, arrayOf(appContext.packageName), false)
         }
 
-        // 4. Concurrently unhide all packages in background (non-blocking)
+        // 4. Concurrently unhide all packages in background as redundancy
         CoroutineScope(Dispatchers.IO).launch {
             val chunks = packagesToRestore.chunked(25)
             chunks.forEach { chunk ->

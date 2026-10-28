@@ -1,8 +1,8 @@
 {
-  "versionCode": 31,
-  "versionName": "1.4.4",
-  "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.4.4/FocusKiosk.apk",
+  "versionCode": 32,
+  "versionName": "1.4.5",
+  "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.4.5/FocusKiosk.apk",
   "sha256": "",
-  "releaseNotes": "v1.4.4: Unblock app uninstall & sideloading, fix silent updater package session, and clean-slate unlock reset.",
+  "releaseNotes": "v1.4.5: Unconditional immediate unlock and full reset of 30-day timer, unsuspending and unhiding all applications on launch.",
   "minSdkVersion": 28
 }

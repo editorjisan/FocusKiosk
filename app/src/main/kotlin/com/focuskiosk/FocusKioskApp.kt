@@ -20,14 +20,10 @@ class FocusKioskApp : Application(), Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
 
-        // v1.4.4 FORCE CLEAN SLATE UNLOCK:
-        // Trigger immediate restore as early as Application onCreate to clear any stuck 30-day locks
+        // ALWAYS FORCE COMPLETE UNLOCK & RESTORE ON STARTUP:
+        // Clear any stuck 30-day focus lock, unsuspend all apps, unhide all apps, and reset lock state
         runCatching {
-            val resetDone = com.focuskiosk.storage.SecureStorage.getBoolean(this, com.focuskiosk.storage.SecureStorage.KEY_RESET_APPLIED_V144, false)
-            if (!resetDone) {
-                com.focuskiosk.storage.SecureStorage.putBoolean(this, com.focuskiosk.storage.SecureStorage.KEY_RESET_APPLIED_V144, true)
-                com.focuskiosk.policy.KioskRestoreManager.restoreAllApps(this)
-            }
+            com.focuskiosk.policy.KioskRestoreManager.restoreAllApps(this)
         }
 
         // 0. GUARANTEE LAUNCHER ICON VISIBILITY:
