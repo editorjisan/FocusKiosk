@@ -6,30 +6,24 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
-import com.focuskiosk.service.FocusNotificationService
 import com.focuskiosk.storage.SecureStorage
 import java.text.SimpleDateFormat
-import java.util.Calendar
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.temporal.ChronoUnit
 import java.util.Date
 import java.util.Locale
 
 /**
  * WorkWindowScheduler
  * ───────────────────
- * Manages scheduled daily or periodic (every 1, 2, or 3 days) windows
- * where content creators and video editors can access video uploading and work apps
- * (e.g. YouTube, TikTok, Instagram, Drive, Chrome, CapCut) without breaking the long-term focus lock.
- *
- * Guarantees:
- * 1. Deterministic Multi-day Intervals: Uses fixed anchor epoch to prevent schedule drift.
- * 2. Active Window Detection: If rebooted or launched within a window, immediately activates.
- * 3. Web Filtering Synchronization: Clears URLBlocklist during window so creators can upload
- *    videos to Facebook, TikTok, Instagram, and re-enforces URLBlocklist when window closes.
- * 4. Desktop Icon Preservation: Suspends/unsuspends apps WITHOUT hiding, keeping desktop icons intact.
- * 5. Hardware RTC Wake-up: Uses setAlarmClock() so alarms fire on time even in deep Doze mode.
+ * The "Upload Window": every N days at a fixed time the phone is FULLY unlocked for a set
+ * length of time (all apps, notifications and websites), then the focus lock is re-applied
+ * automatically. Windows are counted from a fixed anchor day so the cadence never drifts,
+ * windows that run past midnight are handled, and each window opens at most once.
  */
 object WorkWindowScheduler {
 
@@ -43,377 +37,257 @@ object WorkWindowScheduler {
     private const val REQUEST_CODE_START = 3001
     private const val REQUEST_CODE_END   = 3002
 
+    const val DEFAULT_START_HOUR = 20
+    const val DEFAULT_DURATION_MINS = 60
+    const val MAX_INTERVAL_DAYS = 30
+
     data class WindowSchedule(
         val isCurrentlyActive: Boolean,
+        val currentWindowStartMs: Long,
         val currentWindowEndMs: Long,
         val nextWindowStartMs: Long,
         val nextWindowEndMs: Long
     )
 
+    data class Config(val hour: Int, val minute: Int, val intervalDays: Int, val durationMins: Int)
+
+    fun config(context: Context) = Config(
+        hour = SecureStorage.getInt(context, SecureStorage.KEY_WORK_WINDOW_START_HOUR, DEFAULT_START_HOUR).coerceIn(0, 23),
+        minute = SecureStorage.getInt(context, SecureStorage.KEY_WORK_WINDOW_START_MINUTE, 0).coerceIn(0, 59),
+        intervalDays = SecureStorage.getInt(context, SecureStorage.KEY_WORK_WINDOW_INTERVAL_DAYS, 1).coerceIn(1, MAX_INTERVAL_DAYS),
+        durationMins = SecureStorage.getInt(context, SecureStorage.KEY_WORK_WINDOW_DURATION_MINS, DEFAULT_DURATION_MINS).coerceIn(5, 24 * 60)
+    )
+
+    fun saveConfig(context: Context, cfg: Config) {
+        SecureStorage.putInt(context, SecureStorage.KEY_WORK_WINDOW_START_HOUR, cfg.hour)
+        SecureStorage.putInt(context, SecureStorage.KEY_WORK_WINDOW_START_MINUTE, cfg.minute)
+        SecureStorage.putInt(context, SecureStorage.KEY_WORK_WINDOW_INTERVAL_DAYS, cfg.intervalDays)
+        SecureStorage.putInt(context, SecureStorage.KEY_WORK_WINDOW_DURATION_MINS, cfg.durationMins)
+    }
+
     fun isEnabled(context: Context): Boolean =
         SecureStorage.getBoolean(context, SecureStorage.KEY_WORK_WINDOW_ENABLED, false)
+
+    fun setEnabled(context: Context, enabled: Boolean) =
+        SecureStorage.putBoolean(context, SecureStorage.KEY_WORK_WINDOW_ENABLED, enabled)
 
     fun isWindowActive(context: Context): Boolean =
         SecureStorage.getBoolean(context, SecureStorage.KEY_WORK_WINDOW_ACTIVE, false)
 
-    /**
-     * Calculates the deterministic window schedule relative to the fixed anchor date.
-     */
-    fun calculateWindowSchedule(context: Context, now: Long = System.currentTimeMillis()): WindowSchedule {
-        val startHour = SecureStorage.getInt(context, SecureStorage.KEY_WORK_WINDOW_START_HOUR, 20)
-        val startMinute = SecureStorage.getInt(context, SecureStorage.KEY_WORK_WINDOW_START_MINUTE, 0)
-        val intervalDays = SecureStorage.getInt(context, SecureStorage.KEY_WORK_WINDOW_INTERVAL_DAYS, 1).coerceAtLeast(1)
-        val durationMins = SecureStorage.getInt(context, SecureStorage.KEY_WORK_WINDOW_DURATION_MINS, 60).coerceAtLeast(10)
-        val durationMs = durationMins * 60_000L
+    private fun cycleId(startMs: Long) = "cycle_$startMs"
 
-        // Retrieve or initialize fixed anchor date
+    /** Re-anchors the cadence on today (called when the focus lock starts). */
+    fun resetAnchor(context: Context, now: Long = System.currentTimeMillis()) {
+        SecureStorage.putLong(context, SecureStorage.KEY_WORK_WINDOW_ANCHOR_MS, now)
+        SecureStorage.putString(context, SecureStorage.KEY_WORK_WINDOW_CYCLE_ID, "")
+    }
+
+    /** Starting a lock inside today's window should not unlock straight away; skip to the next one. */
+    fun skipCurrentWindow(context: Context) {
+        val schedule = calculateWindowSchedule(context)
+        if (schedule.isCurrentlyActive) {
+            SecureStorage.putString(context, SecureStorage.KEY_WORK_WINDOW_CYCLE_ID, cycleId(schedule.currentWindowStartMs))
+        }
+    }
+
+    private fun anchorDate(context: Context, zone: ZoneId, now: Long): LocalDate {
         var anchorMs = SecureStorage.getLong(context, SecureStorage.KEY_WORK_WINDOW_ANCHOR_MS, 0L)
         if (anchorMs <= 0L) {
-            val cal = Calendar.getInstance().apply {
-                timeInMillis = now
-                set(Calendar.HOUR_OF_DAY, startHour)
-                set(Calendar.MINUTE, startMinute)
-                set(Calendar.SECOND, 0)
-                set(Calendar.MILLISECOND, 0)
-            }
-            anchorMs = cal.timeInMillis
+            anchorMs = now
             SecureStorage.putLong(context, SecureStorage.KEY_WORK_WINDOW_ANCHOR_MS, anchorMs)
         }
-
-        // Anchor midnight
-        val anchorZero = Calendar.getInstance().apply {
-            timeInMillis = anchorMs
-            set(Calendar.HOUR_OF_DAY, 0)
-            set(Calendar.MINUTE, 0)
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
-        }
-
-        // Today midnight
-        val todayZero = Calendar.getInstance().apply {
-            timeInMillis = now
-            set(Calendar.HOUR_OF_DAY, 0)
-            set(Calendar.MINUTE, 0)
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
-        }
-
-        val diffDays = ((todayZero.timeInMillis - anchorZero.timeInMillis) / (24L * 3600_000L)).toInt()
-
-        // Today's scheduled window start and end
-        val todayWindowStart = Calendar.getInstance().apply {
-            timeInMillis = now
-            set(Calendar.HOUR_OF_DAY, startHour)
-            set(Calendar.MINUTE, startMinute)
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
-        }.timeInMillis
-        val todayWindowEnd = todayWindowStart + durationMs
-
-        // Check if today matches the interval cadence
-        val isTodayIntervalDay = (diffDays % intervalDays == 0)
-
-        // Generate unique cycle ID for today's scheduled window (e.g. "cycle_2026-10-27_20_00")
-        val cycleDateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(todayWindowStart))
-        val currentCycleId = "cycle_${cycleDateStr}_${startHour}_${startMinute}"
-        val lastFinishedCycleId = SecureStorage.getString(context, SecureStorage.KEY_WORK_WINDOW_CYCLE_ID, "")
-
-        // If this specific cycle was already finished (by time expiration or user clicking "Video Upload Done"), do not reactivate it today!
-        val isCycleAlreadyFinished = (lastFinishedCycleId == currentCycleId)
-
-        return if (isTodayIntervalDay) {
-            if (now in todayWindowStart until todayWindowEnd && !isCycleAlreadyFinished) {
-                // ACTIVE NOW!
-                val nextStartCal = Calendar.getInstance().apply {
-                    timeInMillis = todayWindowStart
-                    add(Calendar.DAY_OF_YEAR, intervalDays)
-                }
-                WindowSchedule(
-                    isCurrentlyActive = true,
-                    currentWindowEndMs = todayWindowEnd,
-                    nextWindowStartMs = nextStartCal.timeInMillis,
-                    nextWindowEndMs = nextStartCal.timeInMillis + durationMs
-                )
-            } else if (now < todayWindowStart) {
-                // Scheduled for later TODAY
-                WindowSchedule(
-                    isCurrentlyActive = false,
-                    currentWindowEndMs = 0L,
-                    nextWindowStartMs = todayWindowStart,
-                    nextWindowEndMs = todayWindowEnd
-                )
-            } else {
-                // Today's window has already passed or was finished; advance by intervalDays
-                val nextStartCal = Calendar.getInstance().apply {
-                    timeInMillis = todayWindowStart
-                    add(Calendar.DAY_OF_YEAR, intervalDays)
-                }
-                WindowSchedule(
-                    isCurrentlyActive = false,
-                    currentWindowEndMs = 0L,
-                    nextWindowStartMs = nextStartCal.timeInMillis,
-                    nextWindowEndMs = nextStartCal.timeInMillis + durationMs
-                )
-            }
-        } else {
-            // Today is an off-day in the multi-day interval
-            val mod = ((diffDays % intervalDays) + intervalDays) % intervalDays
-            val daysUntilNext = intervalDays - mod
-            val nextStartCal = Calendar.getInstance().apply {
-                timeInMillis = todayWindowStart
-                add(Calendar.DAY_OF_YEAR, daysUntilNext)
-            }
-            WindowSchedule(
-                isCurrentlyActive = false,
-                currentWindowEndMs = 0L,
-                nextWindowStartMs = nextStartCal.timeInMillis,
-                nextWindowEndMs = nextStartCal.timeInMillis + durationMs
-            )
-        }
+        return Instant.ofEpochMilli(anchorMs).atZone(zone).toLocalDate()
     }
 
-    /**
-     * Schedules the next upload / work window based on saved preferences.
-     */
+    /** Pure schedule maths, exposed for previews in the UI. */
+    fun computeSchedule(cfg: Config, anchor: LocalDate, finishedCycleId: String, now: Long, zone: ZoneId = ZoneId.systemDefault()): WindowSchedule {
+        val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
+        val durationMs = cfg.durationMins * 60_000L
+        val lookBack = (cfg.durationMins / (24 * 60)) + 1
+        var active: Pair<Long, Long>? = null
+        var next: Pair<Long, Long>? = null
+        for (offset in -lookBack.toLong()..(cfg.intervalDays + 1).toLong()) {
+            val date = today.plusDays(offset)
+            if (Math.floorMod(ChronoUnit.DAYS.between(anchor, date), cfg.intervalDays.toLong()) != 0L) continue
+            val start = date.atTime(cfg.hour, cfg.minute).atZone(zone).toInstant().toEpochMilli()
+            val end = start + durationMs
+            if (active == null && now in start until end && cycleId(start) != finishedCycleId) active = start to end
+            if (next == null && start > now) next = start to end
+        }
+        val n = next ?: (now + cfg.intervalDays * 86_400_000L).let { it to it + durationMs }
+        return WindowSchedule(
+            isCurrentlyActive = active != null,
+            currentWindowStartMs = active?.first ?: 0L,
+            currentWindowEndMs = active?.second ?: 0L,
+            nextWindowStartMs = n.first,
+            nextWindowEndMs = n.second
+        )
+    }
+
+    fun calculateWindowSchedule(context: Context, now: Long = System.currentTimeMillis()): WindowSchedule {
+        val zone = ZoneId.systemDefault()
+        return computeSchedule(
+            config(context),
+            anchorDate(context, zone, now),
+            SecureStorage.getString(context, SecureStorage.KEY_WORK_WINDOW_CYCLE_ID, ""),
+            now,
+            zone
+        )
+    }
+
+    /** Arms the alarm for the next window (or opens the current one if we are inside it). */
     fun scheduleNextWindow(context: Context) {
-        if (!isEnabled(context) || !SecureStorage.isLockActive(context)) {
-            Log.d(TAG, "Work window not enabled or lock inactive; skipping scheduling.")
+        val appContext = context.applicationContext
+        if (!isEnabled(appContext) || !SecureStorage.isLockActive(appContext)) {
+            cancelAlarm(appContext, ACTION_WORK_WINDOW_START, REQUEST_CODE_START)
             return
         }
-
-        val appContext = context.applicationContext
         val now = System.currentTimeMillis()
         val schedule = calculateWindowSchedule(appContext, now)
-
         if (schedule.isCurrentlyActive) {
-            onWindowStart(appContext)
+            if (!isWindowActive(appContext)) onWindowStart(appContext)
             return
         }
-
-        val nextStartMs = schedule.nextWindowStartMs
-        val nextEndMs = schedule.nextWindowEndMs
-        SecureStorage.putLong(appContext, SecureStorage.KEY_NEXT_WINDOW_START_MS, nextStartMs)
-        SecureStorage.putLong(appContext, SecureStorage.KEY_NEXT_WINDOW_END_MS, nextEndMs)
-
-        val timeFormat = SimpleDateFormat("EEE, MMM d  h:mm a", Locale.getDefault())
-        Log.i(TAG, "Scheduled next work window for: ${timeFormat.format(Date(nextStartMs))} (in ${(nextStartMs - now) / 60000} mins)")
-
-        setExactAlarm(appContext, nextStartMs, ACTION_WORK_WINDOW_START, REQUEST_CODE_START)
+        SecureStorage.putLong(appContext, SecureStorage.KEY_NEXT_WINDOW_START_MS, schedule.nextWindowStartMs)
+        SecureStorage.putLong(appContext, SecureStorage.KEY_NEXT_WINDOW_END_MS, schedule.nextWindowEndMs)
+        setExactAlarm(appContext, schedule.nextWindowStartMs, ACTION_WORK_WINDOW_START, REQUEST_CODE_START)
+        Log.i(TAG, "Next upload window: ${fmt(schedule.nextWindowStartMs)} → ${fmt(schedule.nextWindowEndMs)}")
     }
 
-    /**
-     * Executes when the scheduled upload window starts.
-     * Temporarily restores access to allowed work/upload apps and clears web filtering.
-     */
+    /** Fully unlocks the phone for the current window. */
     fun onWindowStart(context: Context) {
         val appContext = context.applicationContext
-        if (!SecureStorage.isLockActive(appContext)) return
+        if (!SecureStorage.isLockActive(appContext) || !isEnabled(appContext)) return
 
-        Log.i(TAG, "=======================================================")
-        Log.i(TAG, "WORK WINDOW STARTED: Temporarily unlocking upload apps!")
-        Log.i(TAG, "=======================================================")
-
-        SecureStorage.putBoolean(appContext, SecureStorage.KEY_WORK_WINDOW_ACTIVE, true)
-
+        // The start alarm may fire a few ms early; look a minute ahead for the window.
         val now = System.currentTimeMillis()
-        val schedule = calculateWindowSchedule(appContext, now)
-        val endMs = if (schedule.isCurrentlyActive && schedule.currentWindowEndMs > now) {
-            schedule.currentWindowEndMs
-        } else {
-            val durationMins = SecureStorage.getInt(appContext, SecureStorage.KEY_WORK_WINDOW_DURATION_MINS, 60).coerceAtLeast(10)
-            now + (durationMins * 60_000L)
-        }
-        SecureStorage.putLong(appContext, SecureStorage.KEY_NEXT_WINDOW_END_MS, endMs)
-
-        // Determine packages to unlock
-        val workPackages = getAppsToUnlock(appContext)
-        Log.i(TAG, "Unlocking ${workPackages.size} apps for work window.")
-
-        // Unsuspend designated work apps
-        PolicyEnforcer.unsuspendPackages(appContext, workPackages.toTypedArray())
-
-        // Ensure any apps previously hidden in older versions are unhidden
-        workPackages.forEach { pkg ->
-            PolicyEnforcer.unhideApplication(appContext, pkg)
+        var schedule = calculateWindowSchedule(appContext, now)
+        if (!schedule.isCurrentlyActive) schedule = calculateWindowSchedule(appContext, now + 60_000L)
+        if (!schedule.isCurrentlyActive) {
+            scheduleNextWindow(appContext)
+            return
         }
 
-        // Restore notifications for these apps during window
-        PolicyEnforcer.restoreNotifications(appContext, workPackages.toList())
+        Log.i(TAG, "UPLOAD WINDOW OPEN until ${fmt(schedule.currentWindowEndMs)} — unlocking everything.")
+        SecureStorage.putBoolean(appContext, SecureStorage.KEY_WORK_WINDOW_ACTIVE, true)
+        SecureStorage.putLong(appContext, SecureStorage.KEY_ACTIVE_WINDOW_START_MS, schedule.currentWindowStartMs)
+        SecureStorage.putLong(appContext, SecureStorage.KEY_NEXT_WINDOW_END_MS, schedule.currentWindowEndMs)
 
-        // CRITICAL: Temporarily clear web filtering so social media & creator platforms can upload!
+        val blocked = SecureStorage.getBlockedPackages(appContext)
+        PolicyEnforcer.unsuspendPackages(appContext, blocked.toTypedArray())
+        blocked.forEach { PolicyEnforcer.unhideApplication(appContext, it) }
+        PolicyEnforcer.restoreNotifications(appContext, blocked.toList())
         PolicyEnforcer.clearWebFiltering(appContext)
 
-        // Post notification informing user of open window
-        val endFormat = SimpleDateFormat("h:mm a", Locale.getDefault())
         showNotification(
             appContext,
-            "Upload & Work Window Active 🟢",
-            "Creator apps unlocked until ${endFormat.format(Date(endMs))} for video uploading. Will re-lock automatically."
+            "Upload Window Open",
+            "Your phone is fully unlocked until ${timeFmt(schedule.currentWindowEndMs)}. It locks again automatically."
         )
-
-        // Schedule exact end alarm via setAlarmClock
-        setExactAlarm(appContext, endMs, ACTION_WORK_WINDOW_END, REQUEST_CODE_END)
+        setExactAlarm(appContext, schedule.currentWindowEndMs, ACTION_WORK_WINDOW_END, REQUEST_CODE_END)
     }
 
     /**
-     * Executes when the scheduled upload window ends.
-     * Automatically re-suspends work apps and re-enforces web filtering.
-     * @param isManualEarlyDone true if user clicked "Video Upload Done (Lock Now)"
+     * Closes the window and re-applies the full focus lock (re-computed from the allowed apps,
+     * so anything installed during the window is locked too).
+     * @param isManualEarlyDone true when the user tapped "I'm Done — Lock Now".
      */
     fun onWindowEnd(context: Context, isManualEarlyDone: Boolean = false) {
         val appContext = context.applicationContext
+        val activeStart = SecureStorage.getLong(appContext, SecureStorage.KEY_ACTIVE_WINDOW_START_MS, 0L)
+        if (activeStart > 0L) {
+            SecureStorage.putString(appContext, SecureStorage.KEY_WORK_WINDOW_CYCLE_ID, cycleId(activeStart))
+        }
+        SecureStorage.putBoolean(appContext, SecureStorage.KEY_WORK_WINDOW_ACTIVE, false)
+        SecureStorage.putLong(appContext, SecureStorage.KEY_ACTIVE_WINDOW_START_MS, 0L)
+        cancelAlarm(appContext, ACTION_WORK_WINDOW_END, REQUEST_CODE_END)
+
         if (!SecureStorage.isLockActive(appContext)) return
 
-        Log.i(TAG, "=======================================================")
-        Log.i(TAG, "WORK WINDOW ENDED (manual=$isManualEarlyDone): Automatically re-locking apps!")
-        Log.i(TAG, "=======================================================")
-
-        SecureStorage.putBoolean(appContext, SecureStorage.KEY_WORK_WINDOW_ACTIVE, false)
-
-        // Mark today's cycle as finished so it doesn't trigger again until the next interval day
-        val now = System.currentTimeMillis()
-        val startHour = SecureStorage.getInt(appContext, SecureStorage.KEY_WORK_WINDOW_START_HOUR, 20)
-        val startMinute = SecureStorage.getInt(appContext, SecureStorage.KEY_WORK_WINDOW_START_MINUTE, 0)
-        val cycleDateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(now))
-        val currentCycleId = "cycle_${cycleDateStr}_${startHour}_${startMinute}"
-        SecureStorage.putString(appContext, SecureStorage.KEY_WORK_WINDOW_CYCLE_ID, currentCycleId)
-
-        val workPackages = getAppsToUnlock(appContext)
-
-        // Re-suspend designated work apps
-        PolicyEnforcer.suspendPackages(appContext, workPackages.toTypedArray())
-
-        // Re-hide designated work apps so they completely disappear again
-        workPackages.forEach { pkg ->
-            PolicyEnforcer.hideApplication(appContext, pkg)
-        }
-
-        // Re-suppress notifications
-        PolicyEnforcer.suppressNotifications(appContext, workPackages.toList())
-
-        // CRITICAL: Re-enforce web filtering!
-        PolicyEnforcer.enforceWebFiltering(appContext)
-
-        val notifMessage = if (isManualEarlyDone) {
-            "Video upload done! Creator apps re-locked immediately. Good job staying focused!"
-        } else {
-            "Upload window ended. Focus Lock re-enforced automatically."
-        }
+        Log.i(TAG, "UPLOAD WINDOW CLOSED (manual=$isManualEarlyDone) — re-locking.")
+        PolicyEnforcer.activateFocusLock(appContext)
 
         showNotification(
             appContext,
-            "Upload Window Closed 🔒",
-            notifMessage
+            "Upload Window Closed",
+            if (isManualEarlyDone) "Locked again. Nice work." else "Time's up — Focus Lock is back on."
         )
-
-        // Schedule the next periodic window
         scheduleNextWindow(appContext)
     }
 
-    /**
-     * Validates current time against window intervals (called on wake / boot / user present).
-     */
+    /** Called on boot, screen wake and from the UI ticker; idempotent. */
     fun checkAndSyncWindow(context: Context) {
-        if (!isEnabled(context) || !SecureStorage.isLockActive(context)) return
-
         val appContext = context.applicationContext
-        val now = System.currentTimeMillis()
-        val schedule = calculateWindowSchedule(appContext, now)
-        val isCurrentlyActive = isWindowActive(appContext)
+        if (!SecureStorage.isLockActive(appContext)) return
+        if (!isEnabled(appContext)) {
+            if (isWindowActive(appContext)) onWindowEnd(appContext)
+            return
+        }
+        val schedule = calculateWindowSchedule(appContext)
+        val flagged = isWindowActive(appContext)
+        when {
+            schedule.isCurrentlyActive && !flagged -> onWindowStart(appContext)
+            !schedule.isCurrentlyActive && flagged -> onWindowEnd(appContext)
+            else -> scheduleNextWindow(appContext)
+        }
+    }
 
-        if (schedule.isCurrentlyActive) {
-            if (!isCurrentlyActive) {
-                Log.i(TAG, "checkAndSyncWindow: Inside active window. Starting window.")
-                onWindowStart(appContext)
-            }
-        } else {
-            if (isCurrentlyActive) {
-                Log.i(TAG, "checkAndSyncWindow: Window ended. Closing window.")
-                onWindowEnd(appContext)
-            } else {
-                scheduleNextWindow(appContext)
+    fun cancelAll(context: Context) {
+        cancelAlarm(context, ACTION_WORK_WINDOW_START, REQUEST_CODE_START)
+        cancelAlarm(context, ACTION_WORK_WINDOW_END, REQUEST_CODE_END)
+    }
+
+    private fun pendingIntent(context: Context, action: String, requestCode: Int): PendingIntent =
+        PendingIntent.getBroadcast(
+            context, requestCode,
+            Intent(context, WorkWindowReceiver::class.java).setAction(action),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+    private fun cancelAlarm(context: Context, action: String, requestCode: Int) {
+        runCatching {
+            (context.getSystemService(Context.ALARM_SERVICE) as AlarmManager).cancel(pendingIntent(context, action, requestCode))
+        }
+    }
+
+    private fun setExactAlarm(context: Context, triggerMs: Long, action: String, requestCode: Int) {
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val operation = pendingIntent(context, action, requestCode)
+        runCatching {
+            // Exact + allowed in Doze, without taking over the status-bar alarm icon used by real alarms.
+            alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerMs, operation)
+        }.onFailure {
+            Log.w(TAG, "Exact alarm refused (${it.message}); using setAlarmClock.")
+            runCatching {
+                val show = PendingIntent.getActivity(
+                    context, requestCode + 100,
+                    Intent(context, com.focuskiosk.MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+                alarmManager.setAlarmClock(AlarmManager.AlarmClockInfo(triggerMs, show), operation)
             }
         }
     }
 
-    fun getAppsToUnlock(context: Context): Set<String> {
-        val configured = SecureStorage.getPackageSet(context, SecureStorage.KEY_WORK_WINDOW_PACKAGES)
-        if (configured.isNotEmpty()) return configured
-
-        // Default: If no specific apps were picked for upload window, UNLOCK ALL BLOCKED APPS during scheduled window!
-        val blocked = SecureStorage.getBlockedPackages(context)
-        return blocked
-    }
-
-    private fun setExactAlarm(context: Context, triggerMs: Long, action: String, requestCode: Int) {
-        runCatching {
-            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-            val intent = Intent(context, WorkWindowReceiver::class.java).apply {
-                this.action = action
-            }
-            val pendingIntent = PendingIntent.getBroadcast(
-                context,
-                requestCode,
-                intent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-
-            val showIntent = Intent(context, com.focuskiosk.MainActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            }
-            val showPendingIntent = PendingIntent.getActivity(
-                context,
-                requestCode + 100,
-                showIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                try {
-                    alarmManager.setAlarmClock(
-                        AlarmManager.AlarmClockInfo(triggerMs, showPendingIntent),
-                        pendingIntent
-                    )
-                    Log.d(TAG, "Hardware RTC AlarmClock set for $action at $triggerMs")
-                } catch (e: Exception) {
-                    Log.w(TAG, "setAlarmClock failed (${e.message}), fallback to setExactAndAllowWhileIdle")
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                        alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerMs, pendingIntent)
-                    } else {
-                        alarmManager.setExact(AlarmManager.RTC_WAKEUP, triggerMs, pendingIntent)
-                    }
-                }
-            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerMs, pendingIntent)
-            } else {
-                alarmManager.setExact(AlarmManager.RTC_WAKEUP, triggerMs, pendingIntent)
-            }
-        }.onFailure { Log.e(TAG, "Failed setting alarm for $action: ${it.message}") }
-    }
+    private fun fmt(ms: Long) = SimpleDateFormat("EEE, MMM d h:mm a", Locale.getDefault()).format(Date(ms))
+    private fun timeFmt(ms: Long) = SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date(ms))
 
     private fun showNotification(context: Context, title: String, message: String) {
         runCatching {
             val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                val channel = NotificationChannel(
-                    CHANNEL_ID,
-                    "Focus Kiosk Work Window",
-                    NotificationManager.IMPORTANCE_HIGH
-                ).apply {
-                    description = "Notifications for scheduled video upload and work windows"
+            nm.createNotificationChannel(
+                NotificationChannel(CHANNEL_ID, "Upload Window", NotificationManager.IMPORTANCE_HIGH).apply {
+                    description = "When your phone unlocks and locks again for uploads"
                 }
-                nm.createNotificationChannel(channel)
-            }
-
+            )
             val notif = NotificationCompat.Builder(context, CHANNEL_ID)
-                .setSmallIcon(com.focuskiosk.R.mipmap.ic_launcher)
+                .setSmallIcon(com.focuskiosk.R.drawable.ic_sym_upload)
                 .setContentTitle(title)
                 .setContentText(message)
                 .setStyle(NotificationCompat.BigTextStyle().bigText(message))
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setAutoCancel(true)
                 .build()
-
             nm.notify(NOTIF_ID, notif)
         }.onFailure { Log.w(TAG, "Failed posting notification: ${it.message}") }
     }

@@ -21,6 +21,9 @@ class FailSafeRestoreReceiver : BroadcastReceiver() {
     }
 
     override fun onReceive(context: Context, intent: Intent) {
+        // Direct Boot: credential-encrypted SecureStorage is unreadable until the first unlock;
+        // BOOT_COMPLETED follows once the user unlocks.
+        if (!(context.getSystemService(Context.USER_SERVICE) as android.os.UserManager).isUserUnlocked) return
         Log.i(TAG, "FailSafeRestoreReceiver received action: ${intent.action}")
 
         // 1. Immediately stop countdown service and cancel notification to prevent negative timer

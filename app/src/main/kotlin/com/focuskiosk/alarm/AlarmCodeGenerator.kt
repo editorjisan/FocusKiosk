@@ -1,119 +1,74 @@
 package com.focuskiosk.alarm
 
 import android.content.Context
-import android.util.Log
-import com.focuskiosk.storage.SecureStorage
 import java.security.MessageDigest
-import java.text.SimpleDateFormat
-import java.util.Calendar
-import java.util.Date
 import java.util.Locale
+import javax.crypto.Mac
+import javax.crypto.spec.SecretKeySpec
 
 /**
  * AlarmCodeGenerator
  * ──────────────────
- * Cryptographic verification engine for Extreme Wake-up Alarm.
+ * 12-digit rotating dismissal codes shared with the PC portal (docs/index.html).
  *
- * Produces deterministic, date- and time-locked 6-digit dismissal codes
- * matching the PC Web Portal algorithm byte-for-byte using SHA-256.
+ *   code(step) = HMAC-SHA256(key = password, msg = "focuskiosk:v2:<id>:<step>")
+ *                → dynamic truncation to 63 bits → mod 10^12, zero-padded
+ *   step       = unix seconds / 120   (a new code every 2 minutes)
  *
- * The code is strictly locked until 60 minutes (1 hour) before the scheduled alarm,
- * preventing users from looking up or memorizing the code prior to sleep.
+ * The phone accepts the last [ACCEPT_PAST_STEPS] steps plus one future step, so a code
+ * stays usable for about 10 minutes — long enough to walk from the PC to the phone,
+ * but useless if written down the night before. The portal reads server time, so
+ * changing the PC clock does not reveal tomorrow's code.
  */
 object AlarmCodeGenerator {
 
-    private const val TAG = "AlarmCodeGenerator"
-    const val CODE_UNLOCK_WINDOW_MINS = 90 // Unlocks 1.5 hours (90 mins) before alarm
+    const val CODE_LENGTH = 12
+    const val STEP_SECONDS = 120L
+    private const val ACCEPT_PAST_STEPS = 4
+    private const val ACCEPT_FUTURE_STEPS = 1
+    private const val MODULUS = 1_000_000_000_000L
+    private const val FALLBACK_KEY = "focuskiosk"
 
-    /**
-     * Core cryptographic hash function matching JavaScript window.crypto.subtle.
-     */
-    fun generateRawCode(
-        userId: String,
-        password: String,
-        dateString: String,
-        alarmHour: Int,
-        alarmMinute: Int
-    ): String {
-        return try {
-            val normalizedUser = userId.trim().lowercase(Locale.ROOT)
-            val normalizedPass = password.trim()
-            val input = "$normalizedUser:$normalizedPass:$dateString-$alarmHour:$alarmMinute"
+    fun stepAt(epochMs: Long): Long = Math.floorDiv(epochMs / 1000L, STEP_SECONDS)
 
-            val md = MessageDigest.getInstance("SHA-256")
-            val hash = md.digest(input.toByteArray(Charsets.UTF_8))
+    private fun mac(password: String): Mac {
+        val key = password.trim().ifEmpty { FALLBACK_KEY }.toByteArray(Charsets.UTF_8)
+        return Mac.getInstance("HmacSHA256").apply { init(SecretKeySpec(key, "HmacSHA256")) }
+    }
 
-            val intVal = java.nio.ByteBuffer.wrap(hash).int
+    private fun normalizeUser(userId: String) = userId.trim().lowercase(Locale.ROOT)
 
-            val code = (Math.abs(intVal) % 900000) + 100000
-            code.toString()
-        } catch (e: Exception) {
-            Log.e(TAG, "Error generating code: ${e.message}", e)
-            "123456"
+    fun codeForStep(userId: String, password: String, step: Long): String {
+        val hash = mac(password).doFinal("focuskiosk:v2:${normalizeUser(userId)}:$step".toByteArray(Charsets.UTF_8))
+        val offset = hash[hash.size - 1].toInt() and 0x0f
+        var value = 0L
+        for (i in 0 until 8) {
+            value = (value shl 8) or (hash[offset + i].toLong() and 0xff)
         }
+        value = value and Long.MAX_VALUE
+        return (value % MODULUS).toString().padStart(CODE_LENGTH, '0')
     }
 
-    /**
-     * Generates today's code for given credentials and alarm time.
-     */
-    fun getTodayCode(context: Context): String {
-        val userId = SecureStorage.getString(context, SecureStorage.KEY_ALARM_USER_ID, "jisan")
-        val password = SecureStorage.getString(context, SecureStorage.KEY_ALARM_PASSWORD, "1234")
-        val alarmHour = SecureStorage.getInt(context, SecureStorage.KEY_ALARM_HOUR, 6)
-        val alarmMinute = SecureStorage.getInt(context, SecureStorage.KEY_ALARM_MINUTE, 30)
-
-        val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-        return generateRawCode(userId, password, dateStr, alarmHour, alarmMinute)
+    /** Four-character fingerprint shown on both phone and portal to confirm the credentials match. */
+    fun keyCheck(userId: String, password: String): String {
+        val hash = mac(password).doFinal("focuskiosk:v2:check:${normalizeUser(userId)}".toByteArray(Charsets.UTF_8))
+        return hash.take(2).joinToString("") { "%02X".format(it.toInt() and 0xff) }
     }
 
-    /**
-     * Validates an entered code against today's (and yesterday's rollover) alarm times.
-     */
-    fun validateEnteredCode(context: Context, enteredCode: String): Boolean {
-        val cleanCode = enteredCode.trim()
-        if (cleanCode.length != 6) return false
+    fun keyCheck(context: Context): String =
+        keyCheck(AlarmStore.portalUser(context), AlarmStore.portalPassword(context))
 
-        val userId = SecureStorage.getString(context, SecureStorage.KEY_ALARM_USER_ID, "jisan")
-        val password = SecureStorage.getString(context, SecureStorage.KEY_ALARM_PASSWORD, "1234")
-
-        val alarms = ExtremeAlarmManager.getAlarms(context)
-        val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-        val cal = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -1) }
-        val yesterdayStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(cal.time)
-
-        // Validate entered code against any active configured alarm times
-        for (alarm in alarms) {
-            val todayCode = generateRawCode(userId, password, todayStr, alarm.hour, alarm.minute)
-            if (cleanCode == todayCode) return true
-
-            val yesterdayCode = generateRawCode(userId, password, yesterdayStr, alarm.hour, alarm.minute)
-            if (cleanCode == yesterdayCode) return true
+    fun isValid(userId: String, password: String, entered: String, nowMs: Long = System.currentTimeMillis()): Boolean {
+        val clean = entered.filter { it.isDigit() }
+        if (clean.length != CODE_LENGTH) return false
+        val now = stepAt(nowMs)
+        for (step in (now - ACCEPT_PAST_STEPS)..(now + ACCEPT_FUTURE_STEPS)) {
+            val expected = codeForStep(userId, password, step)
+            if (MessageDigest.isEqual(expected.toByteArray(), clean.toByteArray())) return true
         }
-
-        // Fallback check against legacy single alarm
-        val alarmHour = SecureStorage.getInt(context, SecureStorage.KEY_ALARM_HOUR, 6)
-        val alarmMinute = SecureStorage.getInt(context, SecureStorage.KEY_ALARM_MINUTE, 30)
-        val fallbackToday = generateRawCode(userId, password, todayStr, alarmHour, alarmMinute)
-        val fallbackYesterday = generateRawCode(userId, password, yesterdayStr, alarmHour, alarmMinute)
-        return cleanCode == fallbackToday || cleanCode == fallbackYesterday
+        return false
     }
 
-    /**
-     * Returns true if the current time is within the unlock window (1 hour before alarm through 4 hours after).
-     */
-    fun isCodeUnlocked(alarmHour: Int, alarmMinute: Int, nowMs: Long = System.currentTimeMillis()): Boolean {
-        val cal = Calendar.getInstance().apply {
-            timeInMillis = nowMs
-            set(Calendar.HOUR_OF_DAY, alarmHour)
-            set(Calendar.MINUTE, alarmMinute)
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
-        }
-
-        val alarmMs = cal.timeInMillis
-        val unlockStartMs = alarmMs - (CODE_UNLOCK_WINDOW_MINS * 60_000L)
-        val unlockEndMs = alarmMs + (4 * 3600_000L)
-
-        return nowMs in unlockStartMs..unlockEndMs
-    }
+    fun validateEnteredCode(context: Context, entered: String): Boolean =
+        isValid(AlarmStore.portalUser(context), AlarmStore.portalPassword(context), entered)
 }

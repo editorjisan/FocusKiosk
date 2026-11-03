@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/pickerRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/ios_bg"
+    android:orientation="vertical">
+
+    <FrameLayout
+        android:id="@+id/pickerNav"
+        android:layout_width="match_parent"
+        android:layout_height="44dp">
+
+        <LinearLayout
+            android:id="@+id/btnBack"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:layout_gravity="start|center_vertical"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="8dp"
+            android:paddingEnd="12dp">
+
+            <ImageView
+                android:layout_width="12dp"
+                android:layout_height="21dp"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_ios_back" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:fontFamily="@font/inter_regular"
+                android:text="Back"
+                android:textColor="@color/ios_blue"
+                android:textSize="17sp" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/tvPickerTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:fontFamily="@font/inter_semibold"
+            android:text="Allowed Apps"
+            android:textColor="@color/ios_label"
+            android:textSize="17sp" />
+
+        <TextView
+            android:id="@+id/btnPresets"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:layout_gravity="end|center_vertical"
+            android:fontFamily="@font/inter_regular"
+            android:gravity="center"
+            android:paddingStart="12dp"
+            android:paddingEnd="16dp"
+            android:text="Presets"
+            android:textColor="@color/ios_blue"
+            android:textSize="17sp" />
+    </FrameLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="16dp"
+        android:paddingTop="6dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="8dp">
+
+        <LinearLayout
+            android:id="@+id/searchField"
+            android:layout_width="0dp"
+            android:layout_height="38dp"
+            android:layout_weight="1"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="8dp"
+            android:paddingEnd="6dp">
+
+            <ImageView
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_ios_search" />
+
+            <EditText
+                android:id="@+id/etSearch"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_marginStart="6dp"
+                android:layout_weight="1"
+                android:background="@null"
+                android:fontFamily="@font/inter_regular"
+                android:hint="Search"
+                android:imeOptions="actionSearch"
+                android:inputType="text|textNoSuggestions"
+                android:singleLine="true"
+                android:textColor="@color/ios_label"
+                android:textColorHint="@color/ios_secondary_label"
+                android:textSize="17sp" />
+
+            <ImageView
+                android:id="@+id/btnClearSearch"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:contentDescription="Clear"
+                android:padding="5dp"
+                android:src="@drawable/ic_ios_clear"
+                android:visibility="gone" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/btnCancelSearch"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_regular"
+            android:paddingStart="12dp"
+            android:paddingTop="8dp"
+            android:paddingBottom="8dp"
+            android:text="Cancel"
+            android:textColor="@color/ios_blue"
+            android:textSize="17sp"
+            android:visibility="gone" />
+    </LinearLayout>
+
+    <View
+        android:id="@+id/pickerHairline"
+        android:layout_width="match_parent"
+        android:layout_height="0.5dp"
+        android:alpha="0"
+        android:background="@color/ios_separator" />
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rvApps"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:clipToPadding="false"
+        android:paddingBottom="32dp" />
+</LinearLayout>

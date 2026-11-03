@@ -1,8 +1,8 @@
 package com.focuskiosk
 
 import android.app.Application
+import android.os.UserManager
 import androidx.work.Configuration
-import com.focuskiosk.updater.UpdateWorker
 
 /**
  * Application entry point.
@@ -20,13 +20,15 @@ class FocusKioskApp : Application(), Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
 
-        // ALWAYS FORCE COMPLETE UNLOCK & RESTORE ON STARTUP:
-        // Clear any stuck 30-day focus lock, unsuspend all apps, unhide all apps, and reset lock state
-        runCatching {
-            com.focuskiosk.policy.KioskRestoreManager.restoreAllApps(this)
-        }
+        // Direct Boot (after a restart, before the first unlock): only the alarm components run,
+        // and they use device-protected storage. Everything below needs the unlocked user.
+        val um = getSystemService(UserManager::class.java)
+        if (um != null && !um.isUserUnlocked) return
 
-        // 0. GUARANTEE LAUNCHER ICON VISIBILITY:
+        // 0. Move pre-1.5 alarms and PC portal credentials to Direct Boot storage (one time).
+        com.focuskiosk.alarm.AlarmStore.migrateFromSecureStorage(this)
+
+        // GUARANTEE LAUNCHER ICON VISIBILITY:
         // Force-enable all launcher components to recover from any previous disabled states!
         runCatching {
             val pm = packageManager
@@ -53,12 +55,16 @@ class FocusKioskApp : Application(), Configuration.Provider {
         com.focuskiosk.media.RealtimeMediaObserverService.start(this)
         com.focuskiosk.updater.MediaPurgeWorker.schedule(this)
 
-        // 4. If lock active, re-enforce web filtering and URLBlocklist
-        if (com.focuskiosk.storage.SecureStorage.isLockActive(this)) {
+        // 4. If lock active, re-enforce web filtering (except while the upload window is open)
+        if (com.focuskiosk.storage.SecureStorage.isLockActive(this) &&
+            !com.focuskiosk.policy.WorkWindowScheduler.isWindowActive(this)) {
             com.focuskiosk.policy.PolicyEnforcer.enforceWebFiltering(this)
         }
 
-        // 5. Schedule and trigger silent OTA auto-update engine
+        // 5. Keep the next alarm armed
+        com.focuskiosk.alarm.ExtremeAlarmManager.scheduleNext(this)
+
+        // 6. Schedule and trigger silent OTA auto-update engine
         com.focuskiosk.updater.SilentUpdateManager.schedulePeriodicCheck(this)
         com.focuskiosk.updater.SilentUpdateManager.triggerImmediateCheck(this)
     }

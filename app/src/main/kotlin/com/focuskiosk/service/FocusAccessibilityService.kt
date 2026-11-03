@@ -104,9 +104,9 @@ class FocusAccessibilityService : AccessibilityService() {
         // 1. Zero-Tolerance Blocked App Trap: Blocks access via notification taps, deep links, or recents
         if (SecureStorage.getBoolean(applicationContext, SecureStorage.KEY_LOCK_ACTIVE, false)) {
             val blockedPkgs = SecureStorage.getBlockedPackages(applicationContext)
+            // The upload window unlocks everything, so nothing is trapped while it is open.
             val isWorkWindow = com.focuskiosk.policy.WorkWindowScheduler.isWindowActive(applicationContext)
-            val workApps = if (isWorkWindow) com.focuskiosk.policy.WorkWindowScheduler.getAppsToUnlock(applicationContext) else emptySet()
-            if (pkg in blockedPkgs && pkg !in workApps) {
+            if (pkg in blockedPkgs && !isWorkWindow) {
                 val now = System.currentTimeMillis()
                 if (now - lastActionTimestamp > 400L) {
                     lastActionTimestamp = now

@@ -4,9 +4,7 @@ import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.util.Log
-import com.focuskiosk.storage.SecureStorage
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -15,173 +13,163 @@ import java.util.Locale
 /**
  * ExtremeAlarmManager
  * ───────────────────
- * High-priority wake-up alarm scheduler.
- *
- * Uses AlarmManager.setAlarmClock() which guarantees the Android kernel
- * wakes up from deep Doze mode, displays the clock icon on the lock screen,
- * and launches the extreme alarm screen.
+ * Schedules the next alarm with AlarmManager.setAlarmClock(), which wakes the device
+ * from Doze and shows the alarm icon in the status bar, exactly like the Clock app.
+ * Only the earliest upcoming alarm is armed; it is re-computed after every change,
+ * trigger, dismissal, reboot and time-zone change.
  */
 object ExtremeAlarmManager {
 
     private const val TAG = "ExtremeAlarmManager"
     const val ACTION_ALARM_TRIGGER = "com.focuskiosk.alarm.ACTION_EXTREME_ALARM_TRIGGER"
+    const val ACTION_RESUME_RINGING = "com.focuskiosk.alarm.ACTION_RESUME_RINGING"
+    const val EXTRA_ALARM_ID = "alarm_id"
     private const val REQUEST_CODE_ALARM = 4001
+    private const val REQUEST_CODE_RESUME = 4003
 
-    fun isAlarmEnabled(context: Context): Boolean =
-        SecureStorage.getBoolean(context, SecureStorage.KEY_ALARM_ENABLED, false)
+    fun getAlarms(context: Context): List<AlarmItem> = AlarmStore.getAlarms(context)
 
-    /**
-     * Calculates the next epoch timestamp for the scheduled alarm.
-     */
-    fun calculateNextAlarmMs(context: Context): Long {
-        val alarms = getAlarms(context).filter { it.isEnabled }
-        if (alarms.isEmpty()) {
-            val hour = SecureStorage.getInt(context, SecureStorage.KEY_ALARM_HOUR, 6)
-            val minute = SecureStorage.getInt(context, SecureStorage.KEY_ALARM_MINUTE, 30)
-            return calculateTimestampForTime(hour, minute)
-        }
+    fun hasEnabledAlarms(context: Context): Boolean = getAlarms(context).any { it.isEnabled }
 
-        val now = System.currentTimeMillis()
-        var earliest = Long.MAX_VALUE
-        for (a in alarms) {
-            val ts = calculateTimestampForTime(a.hour, a.minute)
-            if (ts < earliest) {
-                earliest = ts
-            }
-        }
-        return if (earliest == Long.MAX_VALUE) calculateTimestampForTime(6, 30) else earliest
+    fun saveAlarms(context: Context, list: List<AlarmItem>) {
+        AlarmStore.saveAlarms(context, list)
+        scheduleNext(context)
     }
 
-    private fun calculateTimestampForTime(hour: Int, minute: Int): Long {
-        val now = System.currentTimeMillis()
-        val calendar = Calendar.getInstance().apply {
-            set(Calendar.HOUR_OF_DAY, hour)
-            set(Calendar.MINUTE, minute)
+    fun upsert(context: Context, item: AlarmItem) {
+        val list = getAlarms(context).filter { it.id != item.id } + item
+        saveAlarms(context, list)
+    }
+
+    fun delete(context: Context, id: String) = saveAlarms(context, getAlarms(context).filter { it.id != id })
+
+    fun setEnabled(context: Context, id: String, enabled: Boolean) =
+        saveAlarms(context, getAlarms(context).map { if (it.id == id) it.copy(isEnabled = enabled) else it })
+
+    /** Next time [item] rings strictly after [fromMs]. */
+    fun nextTrigger(item: AlarmItem, fromMs: Long): Long {
+        val cal = Calendar.getInstance().apply {
+            timeInMillis = fromMs
+            set(Calendar.HOUR_OF_DAY, item.hour)
+            set(Calendar.MINUTE, item.minute)
             set(Calendar.SECOND, 0)
             set(Calendar.MILLISECOND, 0)
         }
-        if (calendar.timeInMillis <= now) {
-            calendar.add(Calendar.DAY_OF_YEAR, 1)
+        for (i in 0..7) {
+            if (cal.timeInMillis > fromMs && (!item.isRepeating || cal.get(Calendar.DAY_OF_WEEK) in item.days)) {
+                return cal.timeInMillis
+            }
+            cal.add(Calendar.DAY_OF_YEAR, 1)
         }
-        return calendar.timeInMillis
+        return cal.timeInMillis
     }
 
-    fun getAlarms(context: Context): List<AlarmItem> {
-        val raw = SecureStorage.getString(context, SecureStorage.KEY_MULTI_ALARMS_JSON, "")
-        if (raw.isBlank()) {
-            val defaultHour = SecureStorage.getInt(context, SecureStorage.KEY_ALARM_HOUR, 6)
-            val defaultMin = SecureStorage.getInt(context, SecureStorage.KEY_ALARM_MINUTE, 30)
-            val defaultList = listOf(AlarmItem(hour = defaultHour, minute = defaultMin, label = "Wake up", isEnabled = true))
-            saveAlarms(context, defaultList)
-            return defaultList
+    fun nextAlarm(context: Context, fromMs: Long = System.currentTimeMillis()): Pair<AlarmItem, Long>? =
+        getAlarms(context).filter { it.isEnabled }
+            .map { it to nextTrigger(it, fromMs) }
+            .minByOrNull { it.second }
+
+    private fun triggerIntent(context: Context, alarmId: String?): PendingIntent {
+        val intent = Intent(context, ExtremeAlarmReceiver::class.java).apply {
+            action = ACTION_ALARM_TRIGGER
+            putExtra(EXTRA_ALARM_ID, alarmId)
         }
-        return AlarmItem.listFromJsonString(raw)
+        return PendingIntent.getBroadcast(
+            context, REQUEST_CODE_ALARM, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
     }
 
-    fun saveAlarms(context: Context, list: List<AlarmItem>) {
-        SecureStorage.putString(context, SecureStorage.KEY_MULTI_ALARMS_JSON, AlarmItem.listToJsonString(list))
-        val nextActive = list.firstOrNull { it.isEnabled }
-        if (nextActive != null) {
-            SecureStorage.putInt(context, SecureStorage.KEY_ALARM_HOUR, nextActive.hour)
-            SecureStorage.putInt(context, SecureStorage.KEY_ALARM_MINUTE, nextActive.minute)
-        }
-    }
-
-    /**
-     * Schedules the next exact hardware alarm.
-     */
-    fun scheduleAlarm(context: Context) {
+    fun scheduleNext(context: Context, fromMs: Long = System.currentTimeMillis()) {
         val appContext = context.applicationContext
-        if (!isAlarmEnabled(appContext)) {
-            Log.d(TAG, "Extreme alarm disabled; skipping schedule.")
+        val next = nextAlarm(appContext, fromMs)
+        if (next == null) {
             cancelAlarm(appContext)
             return
         }
-
-        val triggerMs = calculateNextAlarmMs(appContext)
-        SecureStorage.putLong(appContext, SecureStorage.KEY_NEXT_ALARM_TIMESTAMP_MS, triggerMs)
-
-        val timeFormat = SimpleDateFormat("EEE, MMM d  h:mm a", Locale.getDefault())
-        Log.i(TAG, "Scheduling Extreme Alarm for: ${timeFormat.format(Date(triggerMs))} (in ${(triggerMs - System.currentTimeMillis()) / 60000} mins)")
-
+        val (item, triggerMs) = next
+        AlarmStore.setNextAlarm(appContext, item.id, triggerMs)
         runCatching {
-            val alarmManager = appContext.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-
-            val intent = Intent(appContext, ExtremeAlarmReceiver::class.java).apply {
-                action = ACTION_ALARM_TRIGGER
-            }
-            val pendingIntent = PendingIntent.getBroadcast(
-                appContext,
-                REQUEST_CODE_ALARM,
-                intent,
+            val am = appContext.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            val show = PendingIntent.getActivity(
+                appContext, REQUEST_CODE_ALARM + 1,
+                Intent(appContext, com.focuskiosk.MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
-
-            // Show intent when clicking the system alarm clock icon on lock screen
-            val showIntent = Intent(appContext, ExtremeAlarmActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            }
-            val pendingShowIntent = PendingIntent.getActivity(
-                appContext,
-                REQUEST_CODE_ALARM + 1,
-                showIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-
-            val alarmClockInfo = AlarmManager.AlarmClockInfo(triggerMs, pendingShowIntent)
-            alarmManager.setAlarmClock(alarmClockInfo, pendingIntent)
-
-            Log.i(TAG, "Hardware AlarmClock set successfully for $triggerMs")
+            am.setAlarmClock(AlarmManager.AlarmClockInfo(triggerMs, show), triggerIntent(appContext, item.id))
+            val fmt = SimpleDateFormat("EEE, MMM d h:mm a", Locale.getDefault())
+            Log.i(TAG, "Next alarm '${item.label}' at ${fmt.format(Date(triggerMs))}")
         }.onFailure { Log.e(TAG, "Failed setting alarm: ${it.message}", it) }
     }
 
-    /**
-     * Cancels any scheduled alarms.
-     */
     fun cancelAlarm(context: Context) {
         val appContext = context.applicationContext
         runCatching {
-            val alarmManager = appContext.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-            val intent = Intent(appContext, ExtremeAlarmReceiver::class.java).apply {
-                action = ACTION_ALARM_TRIGGER
-            }
-            val pendingIntent = PendingIntent.getBroadcast(
-                appContext,
-                REQUEST_CODE_ALARM,
-                intent,
-                PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
-            )
-            if (pendingIntent != null) {
-                alarmManager.cancel(pendingIntent)
-                pendingIntent.cancel()
-            }
-            SecureStorage.putLong(appContext, SecureStorage.KEY_NEXT_ALARM_TIMESTAMP_MS, 0L)
-            Log.i(TAG, "Extreme Alarm cancelled.")
+            val am = appContext.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            am.cancel(triggerIntent(appContext, null))
         }
+        AlarmStore.setNextAlarm(appContext, null, 0L)
+    }
+
+    /** Called by the receiver when the hardware alarm fires. */
+    fun onTriggered(context: Context, alarmId: String?) {
+        val appContext = context.applicationContext
+        val item = getAlarms(appContext).firstOrNull { it.id == alarmId }
+        if (item != null && !item.isRepeating) {
+            AlarmStore.saveAlarms(appContext, getAlarms(appContext).map { if (it.id == item.id) it.copy(isEnabled = false) else it })
+        }
+        startRinging(appContext, alarmId)
+        // Arm the following alarm right away; skip the minute that is ringing now.
+        scheduleNext(appContext, System.currentTimeMillis() + 60_000L)
+    }
+
+    fun startRinging(context: Context, alarmId: String?) {
+        val appContext = context.applicationContext
+        AlarmStore.setRinging(appContext, true, alarmId ?: AlarmStore.ringingAlarmId(appContext))
+        ExtremeAlarmService.start(appContext)
+        ExtremeAlarmService.launchAlarmScreen(appContext)
+    }
+
+    fun onDismissed(context: Context) {
+        val appContext = context.applicationContext
+        Log.i(TAG, "Alarm dismissed with PC code.")
+        AlarmStore.setRinging(appContext, false)
+        cancelResume(appContext)
+        ExtremeAlarmService.stop(appContext)
+        scheduleNext(appContext)
     }
 
     /**
-     * Reschedules alarm after dismissal for the next day.
+     * Re-arms after boot / time change, and resumes an alarm that was still ringing
+     * when the phone was force-restarted.
      */
-    fun onAlarmDismissed(context: Context) {
+    fun checkAndSync(context: Context, resumeRinging: Boolean) {
         val appContext = context.applicationContext
-        Log.i(TAG, "Alarm dismissed! Rescheduling for next cycle.")
-        SecureStorage.putBoolean(appContext, SecureStorage.KEY_ALARM_RINGING, false)
-        scheduleAlarm(appContext)
+        if (resumeRinging && AlarmStore.isRinging(appContext)) {
+            Log.w(TAG, "Alarm was ringing before restart — resuming.")
+            startRinging(appContext, null)
+        }
+        scheduleNext(appContext)
     }
 
-    /**
-     * Verifies alarm state on boot or screen unlock.
-     */
-    fun checkAndSyncAlarm(context: Context) {
-        val appContext = context.applicationContext
-        if (!isAlarmEnabled(appContext)) return
-
-        val now = System.currentTimeMillis()
-        val triggerMs = SecureStorage.getLong(appContext, SecureStorage.KEY_NEXT_ALARM_TIMESTAMP_MS, 0L)
-
-        if (triggerMs <= 0L || triggerMs < now) {
-            scheduleAlarm(appContext)
+    /** Safety net: if the ringing service dies, bring it back in a few seconds. */
+    fun scheduleResume(context: Context, delayMs: Long = 3_000L) {
+        runCatching {
+            val am = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + delayMs, resumeIntent(context))
         }
     }
+
+    private fun cancelResume(context: Context) {
+        runCatching {
+            val am = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            am.cancel(resumeIntent(context))
+        }
+    }
+
+    private fun resumeIntent(context: Context): PendingIntent = PendingIntent.getBroadcast(
+        context, REQUEST_CODE_RESUME,
+        Intent(context, ExtremeAlarmReceiver::class.java).setAction(ACTION_RESUME_RINGING),
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
 }

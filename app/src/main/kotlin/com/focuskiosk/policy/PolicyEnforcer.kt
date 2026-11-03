@@ -431,23 +431,13 @@ object PolicyEnforcer {
 
         Log.i(TAG, "Activating focus lock. Whitelist: ${whitelist.size} apps.")
 
-        // Explicitly restore full navigation features (Home, Overview, Notifications)
-        runCatching {
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
-                dpm(context).setLockTaskFeatures(
-                    admin(context),
-                    DevicePolicyManager.LOCK_TASK_FEATURE_HOME or
-                    DevicePolicyManager.LOCK_TASK_FEATURE_OVERVIEW or
-                    DevicePolicyManager.LOCK_TASK_FEATURE_SYSTEM_INFO or
-                    DevicePolicyManager.LOCK_TASK_FEATURE_NOTIFICATIONS or
-                    DevicePolicyManager.LOCK_TASK_FEATURE_GLOBAL_ACTIONS
-                )
-            }
+        // Explicitly restore full navigation features (Home, Overview, Notifications),
+        // unless an alarm is ringing — then the alarm screen owns lock task mode.
+        if (!com.focuskiosk.alarm.AlarmGuard.isRinging(context)) runCatching {
+            dpm(context).setLockTaskFeatures(admin(context), com.focuskiosk.alarm.AlarmGuard.STANDARD_LOCK_TASK_FEATURES)
             dpm(context).setLockTaskPackages(admin(context), emptyArray())
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-                dpm(context).setStatusBarDisabled(admin(context), false)
-                dpm(context).setKeyguardDisabled(admin(context), false)
-            }
+            dpm(context).setStatusBarDisabled(admin(context), false)
+            dpm(context).setKeyguardDisabled(admin(context), false)
         }.onFailure { Log.w(TAG, "Failed setting LockTask features: ${it.message}") }
 
         // Explicitly clear any persistent preferred launcher activities so stock launcher takes over
@@ -486,11 +476,10 @@ object PolicyEnforcer {
         // Persist explicit set of blocked packages so restoration never has to guess
         SecureStorage.setBlockedPackages(context, toBlock.toSet())
 
-        // 3. FAST-LOCK: Suspend and Hide all targeted packages
-        // If an upload window is currently active, avoid suspending/hiding designated creator apps.
+        // 3. FAST-LOCK: Suspend and Hide all targeted packages.
+        // While the upload window is open the phone stays fully unlocked; the window's end re-runs this.
         val isWindowActive = WorkWindowScheduler.isWindowActive(context)
-        val workPackages = if (isWindowActive) WorkWindowScheduler.getAppsToUnlock(context) else emptySet()
-        val appsToSuspend = toBlock.filter { it !in workPackages }
+        val appsToSuspend = if (isWindowActive) emptyList() else toBlock
         val safeToSuspend = appsToSuspend.toTypedArray()
         runCatching {
             val failed = dpm(context).setPackagesSuspended(admin(context), safeToSuspend, true)
@@ -518,7 +507,7 @@ object PolicyEnforcer {
         if (blockFactoryReset) disableFactoryReset(context)
 
         // 8. Enforce web filtering (browser URLBlocklist, Private DNS, and deep link interceptor)
-        enforceWebFiltering(context)
+        if (!isWindowActive) enforceWebFiltering(context)
 
         // 9. Silently grant media permissions for real-time adult media purge
         grantMediaPermissionsSilently(context)

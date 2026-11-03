@@ -1,13 +1,59 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="Theme.FocusKiosk" parent="Theme.MaterialComponents.DayNight.NoActionBar">
-        <item name="colorPrimary">#1A1A2E</item>
-        <item name="colorPrimaryVariant">#16213E</item>
-        <item name="colorOnPrimary">#FFFFFF</item>
-        <item name="colorSecondary">#0F3460</item>
-        <item name="colorOnSecondary">#FFFFFF</item>
-        <item name="android:windowBackground">#0D0D0D</item>
-        <item name="android:statusBarColor">#1A1A2E</item>
-        <item name="android:navigationBarColor">#1A1A2E</item>
+        <item name="colorPrimary">@color/ios_blue</item>
+        <item name="colorPrimaryVariant">@color/ios_blue</item>
+        <item name="colorOnPrimary">@color/ios_white</item>
+        <item name="colorSecondary">@color/ios_blue</item>
+        <item name="colorOnSecondary">@color/ios_white</item>
+        <item name="colorAccent">@color/ios_blue</item>
+        <item name="colorControlActivated">@color/ios_blue</item>
+        <item name="android:textColorPrimary">@color/ios_label</item>
+        <item name="android:textColorSecondary">@color/ios_secondary_label</item>
+        <item name="android:textColorHint">@color/ios_tertiary_label</item>
+        <item name="android:colorBackground">@color/ios_bg</item>
+        <item name="android:windowBackground">@color/ios_bg</item>
+        <item name="android:statusBarColor">@color/ios_bg</item>
+        <item name="android:navigationBarColor">@color/ios_bg</item>
+        <item name="android:windowLightStatusBar">@bool/ios_light_bars</item>
+        <item name="android:windowLightNavigationBar">@bool/ios_light_bars</item>
+        <item name="android:fontFamily">@font/inter_regular</item>
+        <item name="android:textCursorDrawable">@drawable/ios_cursor</item>
+        <item name="bottomSheetDialogTheme">@style/ThemeOverlay.FocusKiosk.Sheet</item>
+    </style>
+
+    <!-- The alarm screen is always dark, like the iOS lock screen alarm. -->
+    <style name="Theme.FocusKiosk.Alarm" parent="Theme.MaterialComponents.NoActionBar">
+        <item name="android:windowBackground">@color/alarm_bg_bottom</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@color/alarm_bg_bottom</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:fontFamily">@font/inter_regular</item>
+    </style>
+
+    <style name="ThemeOverlay.FocusKiosk.Sheet" parent="ThemeOverlay.MaterialComponents.BottomSheetDialog">
+        <item name="bottomSheetStyle">@style/Widget.FocusKiosk.Sheet</item>
+        <item name="android:windowIsFloating">false</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@color/ios_sheet</item>
+        <item name="android:backgroundDimAmount">0.35</item>
+        <item name="android:fontFamily">@font/inter_regular</item>
+    </style>
+
+    <style name="Widget.FocusKiosk.Sheet" parent="Widget.MaterialComponents.BottomSheet.Modal">
+        <item name="android:background">@android:color/transparent</item>
+        <item name="backgroundTint">@android:color/transparent</item>
+    </style>
+
+    <style name="IosDialog" parent="Theme.MaterialComponents.DayNight.Dialog">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:backgroundDimAmount">0.4</item>
+        <item name="android:fontFamily">@font/inter_regular</item>
+    </style>
+
+    <style name="IosActionSheetAnimation">
+        <item name="android:windowEnterAnimation">@anim/ios_sheet_in</item>
+        <item name="android:windowExitAnimation">@anim/ios_sheet_out</item>
     </style>
 </resources>

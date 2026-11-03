@@ -20,6 +20,9 @@ class BootReceiver : BroadcastReceiver() {
     companion object { private const val TAG = "FocusBootReceiver" }
 
     override fun onReceive(context: Context, intent: Intent) {
+        // Direct Boot: credential-encrypted SecureStorage is unreadable until the first unlock;
+        // BOOT_COMPLETED follows once the user unlocks.
+        if (!(context.getSystemService(Context.USER_SERVICE) as android.os.UserManager).isUserUnlocked) return
         val action = intent.action
         Log.i(TAG, "BootReceiver onReceive: $action")
 

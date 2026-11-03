@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- iOS system colors (light appearance). Dark values live in values-night/colors.xml. -->
+<resources>
+    <color name="ios_bg">#F2F2F7</color>
+    <color name="ios_cell">#FFFFFF</color>
+    <color name="ios_cell_pressed">#D1D1D6</color>
+    <color name="ios_sheet">#F2F2F7</color>
+    <color name="ios_alert">#F2F2F2</color>
+    <color name="ios_label">#000000</color>
+    <color name="ios_secondary_label">#993C3C43</color>
+    <color name="ios_tertiary_label">#4D3C3C43</color>
+    <color name="ios_separator">#C6C6C8</color>
+    <color name="ios_fill">#1F767680</color>
+    <color name="ios_fill_strong">#33767680</color>
+    <color name="ios_switch_off">#E9E9EA</color>
+    <color name="ios_nav_bar">#FAF9F9F9</color>
+    <color name="ios_scrim">#66000000</color>
+    <color name="ios_cell_elevated">#FFFFFF</color>
+    <color name="ios_separator_elevated">#C6C6C8</color>
+    <color name="ios_segment_selected">#FFFFFF</color>
+    <color name="ios_hud">#E6F2F2F2</color>
+
+    <color name="ios_blue">#007AFF</color>
+    <color name="ios_green">#34C759</color>
+    <color name="ios_red">#FF3B30</color>
+    <color name="ios_orange">#FF9500</color>
+    <color name="ios_yellow">#FFCC00</color>
+    <color name="ios_indigo">#5856D6</color>
+    <color name="ios_purple">#AF52DE</color>
+    <color name="ios_pink">#FF2D55</color>
+    <color name="ios_teal">#30B0C7</color>
+    <color name="ios_gray">#8E8E93</color>
+    <color name="ios_white">#FFFFFF</color>
+
+    <!-- Alarm ringing screen is always dark, like the iOS lock screen. -->
+    <color name="alarm_bg_top">#1C1C1E</color>
+    <color name="alarm_bg_bottom">#000000</color>
+    <color name="alarm_key">#2EFFFFFF</color>
+    <color name="alarm_key_pressed">#66FFFFFF</color>
+</resources>

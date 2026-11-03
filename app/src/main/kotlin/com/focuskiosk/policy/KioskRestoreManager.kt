@@ -176,24 +176,19 @@ object KioskRestoreManager {
             nm.cancel(FocusCountdownService.NOTIFICATION_ID)
         }
 
-        // 6. Restore LockTask packages / features if applicable
-        runCatching {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                devicePolicyManager.setLockTaskFeatures(
-                    adminComponent,
-                    DevicePolicyManager.LOCK_TASK_FEATURE_HOME or
-                    DevicePolicyManager.LOCK_TASK_FEATURE_OVERVIEW or
-                    DevicePolicyManager.LOCK_TASK_FEATURE_SYSTEM_INFO or
-                    DevicePolicyManager.LOCK_TASK_FEATURE_NOTIFICATIONS or
-                    DevicePolicyManager.LOCK_TASK_FEATURE_GLOBAL_ACTIONS
-                )
-            }
+        // 6. Restore LockTask packages / features (left alone while an alarm screen is pinned)
+        val alarmRinging = com.focuskiosk.alarm.AlarmGuard.isRinging(appContext)
+        if (!alarmRinging) runCatching {
+            devicePolicyManager.setLockTaskFeatures(adminComponent, com.focuskiosk.alarm.AlarmGuard.STANDARD_LOCK_TASK_FEATURES)
             devicePolicyManager.setLockTaskPackages(adminComponent, emptyArray())
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                devicePolicyManager.setStatusBarDisabled(adminComponent, false)
-                devicePolicyManager.setKeyguardDisabled(adminComponent, false)
-            }
+            devicePolicyManager.setStatusBarDisabled(adminComponent, false)
+            devicePolicyManager.setKeyguardDisabled(adminComponent, false)
         }.onFailure { Log.w(TAG, "Error resetting LockTask features: ${it.message}") }
+
+        // 6b. The upload window only exists inside a focus lock
+        WorkWindowScheduler.cancelAll(appContext)
+        SecureStorage.putBoolean(appContext, SecureStorage.KEY_WORK_WINDOW_ACTIVE, false)
+        SecureStorage.putLong(appContext, SecureStorage.KEY_ACTIVE_WINDOW_START_MS, 0L)
 
         // 7. Clear web filtering and deep link restrictions
         runCatching {
@@ -217,7 +212,7 @@ object KioskRestoreManager {
         }.onFailure { Log.w(TAG, "Failed re-enabling launcher components: ${it.message}") }
 
         // Launch MainActivity so user sees unlocked state
-        runCatching {
+        if (!alarmRinging) runCatching {
             val mainIntent = Intent(appContext, com.focuskiosk.MainActivity::class.java).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
             }

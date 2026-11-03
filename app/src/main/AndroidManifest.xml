@@ -68,6 +68,12 @@
             </intent-filter>
         </activity>
 
+        <!-- ALLOWED APPS PICKER (pushed from the main screen) -->
+        <activity
+            android:name=".ui.AppPickerActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize|stateHidden" />
+
         <!-- Optional HomeLauncherActivity kept as secondary without HOME category -->
         <activity
             android:name=".launcher.HomeLauncherActivity"
@@ -259,15 +265,20 @@
         <activity
             android:name=".alarm.ExtremeAlarmActivity"
             android:exported="false"
+            android:directBootAware="true"
             android:showWhenLocked="true"
             android:turnScreenOn="true"
             android:screenOrientation="portrait"
             android:launchMode="singleTask"
+            android:lockTaskMode="if_whitelisted"
+            android:taskAffinity="com.focuskiosk.alarm"
+            android:theme="@style/Theme.FocusKiosk.Alarm"
             android:excludeFromRecents="true" />
 
         <service
             android:name=".alarm.ExtremeAlarmService"
             android:exported="false"
+            android:directBootAware="true"
             android:foregroundServiceType="specialUse">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
@@ -280,10 +291,13 @@
             android:directBootAware="true">
             <intent-filter>
                 <action android:name="com.focuskiosk.alarm.ACTION_EXTREME_ALARM_TRIGGER" />
+                <action android:name="com.focuskiosk.alarm.ACTION_RESUME_RINGING" />
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
-                <action android:name="android.intent.action.USER_PRESENT" />
-                <action android:name="android.intent.action.SCREEN_ON" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
             </intent-filter>
         </receiver>
 

@@ -48,9 +48,12 @@ object SecureStorage {
     const val KEY_NEXT_WINDOW_END_MS        = "next_window_end_ms"
     const val KEY_WORK_WINDOW_CYCLE_ID      = "work_window_cycle_id"      // Unique cycle key (e.g. "2026-10-27-20") to prevent repeat unlocks
     const val KEY_RESET_APPLIED_V144        = "reset_applied_v144"        // Force reset flag for v1.4.4 clean slate
+    const val KEY_ACTIVE_WINDOW_START_MS    = "active_window_start_ms"    // Start of the window that is open right now
+    const val KEY_LOCK_START_MS             = "lock_start_ms"             // When the current focus lock began
+    const val KEY_LAST_DURATION_MINS        = "last_duration_mins"        // Last lock duration chosen in the UI
     // ─────────────────────────────────────────────────────────────────────────
 
-    // ── Extreme Wake-up Alarm Constants ──────────────────────────────────────
+    // ── Legacy (pre-1.5) alarm keys — alarms now live in alarm.AlarmStore ──────
     const val KEY_ALARM_ENABLED            = "alarm_enabled"
     const val KEY_ALARM_HOUR               = "alarm_hour"               // 0..23, default 6
     const val KEY_ALARM_MINUTE             = "alarm_minute"             // 0..59, default 30

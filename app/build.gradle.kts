@@ -12,8 +12,8 @@ android {
         applicationId = "com.focuskiosk"
         minSdk = 28
         targetSdk = 34
-        versionCode = 32
-        versionName = "1.4.5"
+        versionCode = 33
+        versionName = "1.5.0"
     }
 
     signingConfigs {
@@ -68,4 +68,6 @@ dependencies {
     implementation(libs.room.ktx)
     implementation(libs.constraintlayout)
     kapt(libs.room.compiler)
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20231013")
 }

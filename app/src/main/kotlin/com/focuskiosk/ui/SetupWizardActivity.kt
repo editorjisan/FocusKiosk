@@ -1,31 +1,49 @@
 package com.focuskiosk.ui
 
-import android.app.Dialog
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
+import android.graphics.drawable.StateListDrawable
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
+import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Toast
-import androidx.activity.OnBackPressedCallback
-import androidx.appcompat.app.AlertDialog
+import android.widget.LinearLayout
+import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.graphics.ColorUtils
 import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
-import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.RecyclerView
+import com.focuskiosk.BuildConfig
+import com.focuskiosk.R
+import com.focuskiosk.alarm.AlarmCodeGenerator
+import com.focuskiosk.alarm.AlarmItem
+import com.focuskiosk.alarm.AlarmStore
+import com.focuskiosk.alarm.ExtremeAlarmActivity
+import com.focuskiosk.alarm.ExtremeAlarmManager
 import com.focuskiosk.databinding.ActivitySetupWizardBinding
-import com.focuskiosk.launcher.AppInfo
-import com.focuskiosk.launcher.HomeLauncherActivity
 import com.focuskiosk.policy.KioskRestoreManager
 import com.focuskiosk.policy.PolicyEnforcer
+import com.focuskiosk.policy.WorkWindowScheduler
 import com.focuskiosk.storage.SecureStorage
+import com.focuskiosk.ui.ios.Ios
+import com.focuskiosk.ui.ios.IosAlert
+import com.focuskiosk.ui.ios.IosForm
+import com.focuskiosk.ui.ios.IosHud
+import com.focuskiosk.ui.ios.IosPill
+import com.focuskiosk.ui.ios.IosProgressBar
+import com.focuskiosk.ui.ios.IosRow
+import com.focuskiosk.ui.ios.IosSection
+import com.focuskiosk.ui.ios.IosStepper
+import com.focuskiosk.ui.ios.IosSwitch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -37,44 +55,50 @@ import java.util.Locale
 /**
  * SetupWizardActivity
  * -------------------
- * First-run onboarding.
+ * The whole app on one iOS Settings-style screen.
  *
- * 1. Display all installed launchable apps. User checks the ones to KEEP.
- * 2. User picks lock duration via modern digital timer card with presets & steppers.
- * 3. On confirmation, all settings are persisted, DPM policies are applied,
- *    and the app self-hides from launcher until timer completion.
+ * Setup mode: lock duration, allowed apps, upload window schedule, protection switches,
+ * alarms and PC portal login, with a pinned "Start Focus Lock" button.
+ * Locked mode: live countdown, upload window status (with "I'm Done — Lock Now"),
+ * alarms and portal settings.
  */
 open class SetupWizardActivity : AppCompatActivity() {
 
-    companion object {
-        @Volatile
-        private var cachedAppList: List<AppInfo>? = null
-    }
+    private lateinit var b: ActivitySetupWizardBinding
+    private lateinit var form: IosForm
+    private val handler = Handler(Looper.getMainLooper())
+    private var bottomInset = 0
 
-    private lateinit var binding: ActivitySetupWizardBinding
-    private lateinit var selectAdapter: AppSelectAdapter
+    private var lockedUntil = 0L
+    private var durationMins = 60
 
-    private var selectedIntervalDays: Int = 1
-    private var selectedWorkWindowStartHour: Int = 20
-    private var selectedWorkWindowStartMinute: Int = 0
-    private var selectedWorkWindowDurationMins: Int = 60
-    private var activeCountdownJob: kotlinx.coroutines.Job? = null
+    // Live-updating pieces of the current render
+    private var updateRow: IosRow? = null
+    private var updateBusy = false
+    private var updateValue: String? = null
+    private var updateSubtitle: String? = null
+    private var focusSection: IosSection? = null
+    private var heroCountdown: TextView? = null
+    private var heroProgress: IosProgressBar? = null
+    private var windowStatusRow: IosRow? = null
+    private var windowDoneRow: IosRow? = null
+    private var lastWindowSync = 0L
 
-    private val requestNotificationPermissionLauncher = registerForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        if (isGranted) {
-            Log.i("SetupWizard", "POST_NOTIFICATIONS granted")
-        } else {
-            Log.w("SetupWizard", "POST_NOTIFICATIONS denied by user")
+    private val ticker = object : Runnable {
+        override fun run() {
+            onTick()
+            handler.postDelayed(this, 1000L)
         }
     }
 
+    private val requestNotificationPermissionLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { isGranted -> Log.i("SetupWizard", "POST_NOTIFICATIONS granted=$isGranted") }
+
     private fun ensureNotificationPermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                requestNotificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
-            }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            requestNotificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
         }
     }
 
@@ -83,79 +107,36 @@ open class SetupWizardActivity : AppCompatActivity() {
 
         // Force-enable all launcher components to recover from any previous disabled states
         runCatching {
-            val pm = packageManager
-            pm.setComponentEnabledSetting(
-                android.content.ComponentName(this, "com.focuskiosk.MainActivity"),
-                PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
-                PackageManager.DONT_KILL_APP
-            )
-            pm.setComponentEnabledSetting(
-                android.content.ComponentName(this, "com.focuskiosk.ui.SetupWizardActivity"),
-                PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
-                PackageManager.DONT_KILL_APP
-            )
+            listOf("com.focuskiosk.MainActivity", "com.focuskiosk.ui.SetupWizardActivity").forEach {
+                packageManager.setComponentEnabledSetting(
+                    android.content.ComponentName(this, it),
+                    PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                    PackageManager.DONT_KILL_APP
+                )
+            }
         }
 
-        // If not device owner, show setup instructions and close.
         if (!PolicyEnforcer.isDeviceOwner(this)) {
             showOwnerError()
             return
         }
 
-        binding = ActivitySetupWizardBinding.inflate(layoutInflater)
-        setContentView(binding.root)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        window.statusBarColor = Color.TRANSPARENT
+        window.navigationBarColor = Color.TRANSPARENT
+        b = ActivitySetupWizardBinding.inflate(layoutInflater)
+        setContentView(b.root)
+        form = IosForm(this, b.form)
+        durationMins = SecureStorage.getInt(this, SecureStorage.KEY_LAST_DURATION_MINS, 60).coerceAtLeast(1)
 
+        setupChrome()
         ensureNotificationPermission()
 
-        binding.tvVersionInfo.text = "v${com.focuskiosk.BuildConfig.VERSION_NAME} (Build ${com.focuskiosk.BuildConfig.VERSION_CODE})"
-
-        // Intercept Back button during active search to dismiss keyboard & restore bottom panel
-        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
-            override fun handleOnBackPressed() {
-                if (binding.etSearchApps.hasFocus() || binding.tvCancelSearch.visibility == View.VISIBLE || !binding.etSearchApps.text.isNullOrEmpty()) {
-                    binding.etSearchApps.text?.clear()
-                    setSearchModeActive(false)
-                } else {
-                    isEnabled = false
-                    onBackPressedDispatcher.onBackPressed()
-                }
-            }
-        })
-
-        // Observe soft keyboard visibility: hide controlsPanel and headers to give rvSelectApps space when keyboard opens
-        ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, insets ->
-            val imeVisible = insets.isVisible(WindowInsetsCompat.Type.ime())
-            if (imeVisible) {
-                binding.controlsPanel.visibility = View.GONE
-                binding.otaUpdateCard.visibility = View.GONE
-                binding.headerTitleLayout.visibility = View.GONE
-                binding.tvCancelSearch.visibility = View.VISIBLE
-            }
-            insets
-        }
-
-        setupList()
-        setupSearchBar()
-        setupDurationControls()
-        setupWorkWindowControls()
-        setupAlarmControls()
-        binding.switchUsbDebugging.isChecked = SecureStorage.getBoolean(this, SecureStorage.KEY_BLOCK_USB_DEBUGGING, false)
-        binding.switchFactoryReset.isChecked = SecureStorage.getBoolean(this, SecureStorage.KEY_BLOCK_FACTORY_RESET, true)
-        binding.btnActivateLock.setOnClickListener { confirmActivation() }
-
-        binding.btnCheckUpdate.setOnClickListener { triggerUpdateFlow() }
-
-        // Auto-check for updates 1.5 seconds after launch to ensure smooth zero-touch update
         lifecycleScope.launch {
-            delay(1500L)
+            withContext(Dispatchers.IO) { runCatching { InstalledApps.load(this@SetupWizardActivity) } }
+            delay(1200L)
             triggerUpdateFlow()
         }
-
-        loadApps()
-        syncLockState()
-
-        // Background silent check for updates on setup launch
-        com.focuskiosk.updater.SilentUpdateManager.triggerImmediateCheck(this)
 
         // Ensure sideloading and APK installs are never restricted
         PolicyEnforcer.unblockAppInstalls(this)
@@ -164,1013 +145,591 @@ open class SetupWizardActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        // Ensure sideloading and APK installs are never restricted
+        if (!::b.isInitialized) return
         PolicyEnforcer.unblockAppInstalls(this)
         PolicyEnforcer.unrestrictSettingsSilently(this)
-
-        syncLockState()
+        render()
+        handler.removeCallbacks(ticker)
+        handler.post(ticker)
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        activeCountdownJob?.cancel()
+    override fun onPause() {
+        super.onPause()
+        handler.removeCallbacks(ticker)
     }
 
-    private fun triggerUpdateFlow() {
-        binding.btnCheckUpdate.isEnabled = false
-        binding.progressBarUpdate.visibility = android.view.View.VISIBLE
-        binding.progressBarUpdate.progress = 0
-        binding.tvUpdateStatus.text = "Checking for updates..."
+    // ── Chrome: insets, collapsing large title, primary button ────────────────
 
-        lifecycleScope.launch {
-            com.focuskiosk.updater.SilentUpdateManager.checkAndInstallUpdateWithProgress(this@SetupWizardActivity) { percent, statusText ->
-                binding.progressBarUpdate.progress = percent
-                binding.tvUpdateStatus.text = statusText
-                if (percent >= 100 || statusText.startsWith("Already") || statusText.startsWith("Failed") || statusText.startsWith("Error")) {
-                    binding.btnCheckUpdate.isEnabled = true
-                }
-            }
+    private fun setupChrome() {
+        b.tvVersionFooter.text = "Focus Kiosk ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"
+        val blue = Ios.color(this, R.color.ios_blue)
+        b.btnPrimary.background = StateListDrawable().apply {
+            setExitFadeDuration(150)
+            addState(intArrayOf(android.R.attr.state_pressed),
+                Ios.rounded(ColorUtils.blendARGB(blue, Color.BLACK, 0.18f), Ios.dpf(this@SetupWizardActivity, 14f)))
+            addState(intArrayOf(), Ios.rounded(blue, Ios.dpf(this@SetupWizardActivity, 14f)))
         }
-    }
+        b.btnPrimary.typeface = Ios.font(this, Ios.Weight.SEMIBOLD)
+        b.btnPrimary.setOnClickListener { confirmActivation() }
 
-    // --  App list  ------------------------------------------------------------
+        val navBg = ColorDrawable(Ios.color(this, R.color.ios_nav_bar)).apply { alpha = 0 }
+        b.navBar.background = navBg
 
-    private fun setupList() {
-        selectAdapter = AppSelectAdapter { count ->
-            binding.tvSelectedCount.text = "$count apps selected"
-        }
-        val lm = LinearLayoutManager(this)
-        binding.rvSelectApps.layoutManager = lm
-        binding.rvSelectApps.adapter = selectAdapter
-        binding.rvSelectApps.setHasFixedSize(false)
-        binding.rvSelectApps.isNestedScrollingEnabled = true
-
-        binding.btnSaveAppPreset.setOnClickListener {
-            AppPresetManager.showSavePresetDialog(this, selectAdapter.getSelectedPackages()) { _ -> }
+        ViewCompat.setOnApplyWindowInsetsListener(b.root) { _, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+            b.navBar.setPadding(0, bars.top, 0, 0)
+            b.bottomBar.setPadding(0, 0, 0, bars.bottom)
+            bottomInset = bars.bottom
+            b.content.setPadding(0, bars.top + Ios.dp(this, 44f), 0, b.content.paddingBottom)
+            updateBottomPadding()
+            insets
         }
 
-        binding.btnLoadAppPreset.setOnClickListener {
-            AppPresetManager.showLoadPresetDialog(this) { pkgs ->
-                selectAdapter.setSelectedPackages(pkgs)
-            }
-        }
-
-        // Dismiss keyboard when dragging results without auto-closing search mode
-        binding.rvSelectApps.addOnScrollListener(object : RecyclerView.OnScrollListener() {
-            override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
-                if (newState != RecyclerView.SCROLL_STATE_IDLE) {
-                    val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager
-                    imm?.hideSoftInputFromWindow(binding.etSearchApps.windowToken, 0)
-                }
-            }
-
-            override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
-                if (dy != 0 && binding.etSearchApps.hasFocus()) {
-                    val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager
-                    imm?.hideSoftInputFromWindow(binding.etSearchApps.windowToken, 0)
-                }
-            }
-        })
-    }
-
-    private fun setSearchModeActive(active: Boolean) {
-        if (active) {
-            binding.controlsPanel.visibility = View.GONE
-            binding.otaUpdateCard.visibility = View.GONE
-            binding.headerTitleLayout.visibility = View.GONE
-            binding.tvCancelSearch.visibility = View.VISIBLE
-        } else {
-            binding.controlsPanel.visibility = View.VISIBLE
-            binding.otaUpdateCard.visibility = View.VISIBLE
-            binding.headerTitleLayout.visibility = View.VISIBLE
-            binding.tvCancelSearch.visibility = View.GONE
-            binding.etSearchApps.clearFocus()
-            val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager
-            imm?.hideSoftInputFromWindow(binding.etSearchApps.windowToken, 0)
-            binding.root.requestFocus()
+        b.scroll.setOnScrollChangeListener { _: View, _: Int, scrollY: Int, _: Int, _: Int ->
+            val title = b.tvLargeTitle
+            val start = title.top - b.content.paddingTop
+            val p = ((scrollY - start).toFloat() / title.height.coerceAtLeast(1)).coerceIn(0f, 1f)
+            b.tvNavTitle.alpha = p
+            b.navHairline.alpha = p
+            navBg.alpha = (p * 255).toInt()
+            title.alpha = 1f - p * 0.9f
         }
     }
 
-    private fun setupSearchBar() {
-        binding.etSearchApps.setOnFocusChangeListener { _, hasFocus ->
-            if (hasFocus) {
-                setSearchModeActive(true)
-            }
-        }
-
-        binding.etSearchApps.addTextChangedListener(object : android.text.TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                val q = s?.toString() ?: ""
-                selectAdapter.filter(q)
-                binding.btnClearSearch.visibility = if (q.isNotEmpty()) View.VISIBLE else View.GONE
-                binding.tvNoAppsFound.visibility = if (selectAdapter.itemCount == 0) View.VISIBLE else View.GONE
-                if (q.isNotEmpty()) {
-                    setSearchModeActive(true)
-                }
-            }
-            override fun afterTextChanged(s: android.text.Editable?) {}
-        })
-
-        binding.tvCancelSearch.setOnClickListener {
-            binding.etSearchApps.text?.clear()
-            setSearchModeActive(false)
-        }
-
-        binding.btnClearSearch.setOnClickListener {
-            binding.etSearchApps.text?.clear()
-        }
-
-        binding.etSearchApps.setOnEditorActionListener { _, actionId, _ ->
-            if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_DONE ||
-                actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH) {
-                val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager
-                imm?.hideSoftInputFromWindow(binding.etSearchApps.windowToken, 0)
-                binding.etSearchApps.clearFocus()
-                if (binding.etSearchApps.text.isNullOrEmpty()) {
-                    setSearchModeActive(false)
-                } else {
-                    binding.controlsPanel.visibility = View.VISIBLE
-                    binding.otaUpdateCard.visibility = View.VISIBLE
-                    binding.headerTitleLayout.visibility = View.VISIBLE
-                    binding.tvCancelSearch.visibility = View.GONE
-                }
-                true
-            } else {
-                false
-            }
-        }
+    private fun updateBottomPadding() {
+        val extra = if (b.bottomBar.visibility == View.VISIBLE) Ios.dp(this, 77f) else Ios.dp(this, 12f)
+        b.content.setPadding(0, b.content.paddingTop, 0, bottomInset + extra)
     }
 
-    private fun loadApps() {
-        // 1. Instant cache hit: render app list in 0ms without waiting for icon decoding
-        cachedAppList?.let { cached ->
-            selectAdapter.submitList(cached)
-        }
+    // ── Rendering ─────────────────────────────────────────────────────────────
 
-        lifecycleScope.launch {
-            val apps = withContext(Dispatchers.IO) {
-                if (cachedAppList != null) {
-                    return@withContext cachedAppList!!
-                }
-
-                val pm = packageManager
-
-                // Query all launchable apps directly in a single IPC call (10x faster)
-                val launchIntent = Intent(Intent.ACTION_MAIN, null).apply {
-                    addCategory(Intent.CATEGORY_LAUNCHER)
-                }
-                val resolveInfos = runCatching {
-                    pm.queryIntentActivities(launchIntent, 0)
-                }.getOrElse { emptyList() }
-
-                val appList = ArrayList<AppInfo>(resolveInfos.size + 4)
-                val seenPackages = HashSet<String>(resolveInfos.size + 4)
-
-                for (resolve in resolveInfos) {
-                    val pkg = resolve.activityInfo?.packageName ?: continue
-                    if (pkg == packageName || seenPackages.contains(pkg)) continue
-
-                    runCatching {
-                        val label = resolve.loadLabel(pm).toString()
-                        val icon = resolve.loadIcon(pm)
-                        appList.add(AppInfo(packageName = pkg, label = label, icon = icon))
-                        seenPackages.add(pkg)
-                    }
-                }
-
-                // Explicit guarantee: ensure Google App / QuickSearchBox is indexed if present
-                if (!seenPackages.contains("com.google.android.googlequicksearchbox")) {
-                    runCatching {
-                        val googleInfo = pm.getApplicationInfo("com.google.android.googlequicksearchbox", 0)
-                        appList.add(
-                            AppInfo(
-                                packageName = googleInfo.packageName,
-                                label = pm.getApplicationLabel(googleInfo).toString(),
-                                icon = pm.getApplicationIcon(googleInfo)
-                            )
-                        )
-                        seenPackages.add(googleInfo.packageName)
-                    }
-                }
-
-                appList.sortBy { it.label.lowercase() }
-                cachedAppList = appList
-                appList
-            }
-            selectAdapter.submitList(apps)
-        }
-    }
-
-    // --  Duration Controls (Steppers & Presets)  -----------------------------
-
-    private var selectedDays: Int = 0
-    private var selectedHours: Int = 0
-    private var selectedMinutes: Int = 1 // Default 1 min for instant usability
-
-    private fun setupDurationControls() {
-        // Stepper buttons for Days
-        binding.btnPlusDay.setOnClickListener {
-            if (selectedDays < 365) selectedDays++
-            updateDurationDisplay()
-        }
-        binding.btnMinusDay.setOnClickListener {
-            if (selectedDays > 0) selectedDays--
-            updateDurationDisplay()
-        }
-
-        // Stepper buttons for Hours
-        binding.btnPlusHour.setOnClickListener {
-            if (selectedHours < 23) {
-                selectedHours++
-            } else {
-                selectedHours = 0
-                if (selectedDays < 365) selectedDays++
-            }
-            updateDurationDisplay()
-        }
-        binding.btnMinusHour.setOnClickListener {
-            if (selectedHours > 0) {
-                selectedHours--
-            } else if (selectedDays > 0) {
-                selectedDays--
-                selectedHours = 23
-            }
-            updateDurationDisplay()
-        }
-
-        // Stepper buttons for Minutes
-        binding.btnPlusMinute.setOnClickListener {
-            if (selectedMinutes < 59) {
-                selectedMinutes++
-            } else {
-                selectedMinutes = 0
-                if (selectedHours < 23) {
-                    selectedHours++
-                } else {
-                    selectedHours = 0
-                    if (selectedDays < 365) selectedDays++
-                }
-            }
-            updateDurationDisplay()
-        }
-        binding.btnMinusMinute.setOnClickListener {
-            if (selectedMinutes > 0) {
-                selectedMinutes--
-            } else if (selectedHours > 0) {
-                selectedHours--
-                selectedMinutes = 59
-            } else if (selectedDays > 0) {
-                selectedDays--
-                selectedHours = 23
-                selectedMinutes = 59
-            }
-            updateDurationDisplay()
-        }
-
-        // Quick Presets
-        binding.chipPreset1m.setOnClickListener { setPreset(0, 0, 1, binding.chipPreset1m) }
-        binding.chipPreset2m.setOnClickListener { setPreset(0, 0, 2, binding.chipPreset2m) }
-        binding.chipPreset5m.setOnClickListener { setPreset(0, 0, 5, binding.chipPreset5m) }
-        binding.chipPreset15m.setOnClickListener { setPreset(0, 0, 15, binding.chipPreset15m) }
-        binding.chipPreset30m.setOnClickListener { setPreset(0, 0, 30, binding.chipPreset30m) }
-        binding.chipPreset1h.setOnClickListener { setPreset(0, 1, 0, binding.chipPreset1h) }
-        binding.chipPreset2h.setOnClickListener { setPreset(0, 2, 0, binding.chipPreset2h) }
-        binding.chipPreset4h.setOnClickListener { setPreset(0, 4, 0, binding.chipPreset4h) }
-        binding.chipPreset1d.setOnClickListener { setPreset(1, 0, 0, binding.chipPreset1d) }
-        binding.chipPreset7d.setOnClickListener { setPreset(7, 0, 0, binding.chipPreset7d) }
-        binding.chipPreset30d.setOnClickListener { setPreset(30, 0, 0, binding.chipPreset30d) }
-
-        setPreset(0, 0, 1, binding.chipPreset1m)
-    }
-
-    private fun setPreset(days: Int, hours: Int, minutes: Int, activeBtn: com.google.android.material.button.MaterialButton? = null) {
-        selectedDays = days
-        selectedHours = hours
-        selectedMinutes = minutes
-        updateDurationDisplay()
-
-        val allChips = listOf(
-            binding.chipPreset1m, binding.chipPreset2m, binding.chipPreset5m,
-            binding.chipPreset15m, binding.chipPreset30m, binding.chipPreset1h,
-            binding.chipPreset2h, binding.chipPreset4h, binding.chipPreset1d,
-            binding.chipPreset7d, binding.chipPreset30d
-        )
-        val selectedColor = android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#007AFF"))
-        val defaultColor = android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#2C2C2E"))
-        for (chip in allChips) {
-            chip.backgroundTintList = if (chip == activeBtn) selectedColor else defaultColor
-        }
-    }
-
-    private fun updateDurationDisplay() {
-        binding.tvDisplayDays.text = String.format(Locale.US, "%02d", selectedDays)
-        binding.tvDisplayHours.text = String.format(Locale.US, "%02d", selectedHours)
-        binding.tvDisplayMinutes.text = String.format(Locale.US, "%02d", selectedMinutes)
-
-        val totalMs = selectedDurationMs()
-        if (totalMs <= 0L) {
-            binding.tvDurationPreview.text = "0m"
-            binding.tvUnlockTimestampPreview.text = "Please select a duration"
-            binding.btnActivateLock.isEnabled = false
-        } else {
-            binding.btnActivateLock.isEnabled = true
-            val durationParts = mutableListOf<String>()
-            if (selectedDays > 0) durationParts.add("${selectedDays}d")
-            if (selectedHours > 0) durationParts.add("${selectedHours}h")
-            if (selectedMinutes > 0) durationParts.add("${selectedMinutes}m")
-            val durationString = durationParts.joinToString(" ")
-            binding.tvDurationPreview.text = durationString
-
-            val unlockTime = System.currentTimeMillis() + totalMs
-            val timeFormat = SimpleDateFormat("EEE, MMM d  h:mm a", Locale.getDefault())
-            binding.tvUnlockTimestampPreview.text = "Unlocks at: ${timeFormat.format(Date(unlockTime))}"
-        }
-    }
-
-    private fun selectedDurationMs(): Long {
-        val totalMinutes = (selectedDays * 24L * 60L) + (selectedHours * 60L) + selectedMinutes
-        return totalMinutes * 60_000L
-    }
-
-    // --  Work Window Controls  ------------------------------------------------
-
-    private fun setupWorkWindowControls() {
-        selectedIntervalDays = SecureStorage.getInt(this, SecureStorage.KEY_WORK_WINDOW_INTERVAL_DAYS, 1).coerceIn(1, 3)
-        selectedWorkWindowStartHour = SecureStorage.getInt(this, SecureStorage.KEY_WORK_WINDOW_START_HOUR, 20)
-        selectedWorkWindowStartMinute = SecureStorage.getInt(this, SecureStorage.KEY_WORK_WINDOW_START_MINUTE, 0)
-        selectedWorkWindowDurationMins = SecureStorage.getInt(this, SecureStorage.KEY_WORK_WINDOW_DURATION_MINS, 60)
-        val isEnabled = SecureStorage.getBoolean(this, SecureStorage.KEY_WORK_WINDOW_ENABLED, true)
-
-        binding.switchWorkWindow.isChecked = isEnabled
-        binding.layoutWorkWindowConfig.visibility = if (isEnabled) View.VISIBLE else View.GONE
-
-        binding.switchWorkWindow.setOnCheckedChangeListener { _, isChecked ->
-            binding.layoutWorkWindowConfig.visibility = if (isChecked) View.VISIBLE else View.GONE
-            updateWorkWindowSummary()
-        }
-
-        updateIntervalButtons()
-
-        binding.btnIntervalDaily.setOnClickListener {
-            selectedIntervalDays = 1
-            updateIntervalButtons()
-            updateWorkWindowSummary()
-        }
-        binding.btnInterval2Days.setOnClickListener {
-            selectedIntervalDays = 2
-            updateIntervalButtons()
-            updateWorkWindowSummary()
-        }
-        binding.btnInterval3Days.setOnClickListener {
-            selectedIntervalDays = 3
-            updateIntervalButtons()
-            updateWorkWindowSummary()
-        }
-
-        binding.btnPickWorkWindowTime.setOnClickListener {
-            val tpd = android.app.TimePickerDialog(
-                this,
-                { _, hourOfDay, minute ->
-                    selectedWorkWindowStartHour = hourOfDay
-                    selectedWorkWindowStartMinute = minute
-                    updateWorkWindowSummary()
-                },
-                selectedWorkWindowStartHour,
-                selectedWorkWindowStartMinute,
-                false
-            )
-            tpd.show()
-        }
-
-        binding.btnPickWorkWindowDuration.setOnClickListener {
-            selectedWorkWindowDurationMins = when (selectedWorkWindowDurationMins) {
-                30 -> 60
-                60 -> 120
-                120 -> 180
-                else -> 30
-            }
-            updateWorkWindowSummary()
-        }
-
-        binding.btnPickWorkWindowApps.setOnClickListener {
-            showWorkWindowAppPickerDialog()
-        }
-
-        updateWorkWindowSummary()
-    }
-
-    private fun showWorkWindowAppPickerDialog() {
-        val allApps = cachedAppList
-        if (allApps.isNullOrEmpty()) {
-            Toast.makeText(this, "Loading installed apps, please try again in a moment...", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        val currentSelected = SecureStorage.getPackageSet(this, SecureStorage.KEY_WORK_WINDOW_PACKAGES)
-        val defaultUploadKeywords = listOf(
-            "youtube", "tiktok", "instagram", "facebook", "drive", "chrome",
-            "phoenix", "premiere", "capcut", "vlogger", "inshot", "kinemaster",
-            "video", "creator", "snaptube", "camera", "iriun", "webcam", "droidcam"
-        )
-        val initialSelected = if (currentSelected.isNotEmpty()) {
-            currentSelected
-        } else {
-            allApps.filter { app ->
-                defaultUploadKeywords.any { app.packageName.contains(it, ignoreCase = true) }
-            }.map { it.packageName }.toSet()
-        }
-
-        val appLabels = allApps.map { it.label }.toTypedArray()
-        val checkedItems = BooleanArray(allApps.size) { i ->
-            allApps[i].packageName in initialSelected
-        }
-
-        val selectedSet = initialSelected.toMutableSet()
-
-        AlertDialog.Builder(this)
-            .setTitle("Select Upload Window Apps")
-            .setMultiChoiceItems(appLabels, checkedItems) { _, which, isChecked ->
-                val pkg = allApps[which].packageName
-                if (isChecked) selectedSet.add(pkg) else selectedSet.remove(pkg)
-            }
-            .setPositiveButton("Save (${selectedSet.size})") { _, _ ->
-                SecureStorage.putPackageSet(this, SecureStorage.KEY_WORK_WINDOW_PACKAGES, selectedSet)
-                updateWorkWindowSummary()
-                Toast.makeText(this, "${selectedSet.size} upload apps configured", Toast.LENGTH_SHORT).show()
-            }
-            .setNeutralButton("Reset to Default") { _, _ ->
-                SecureStorage.putPackageSet(this, SecureStorage.KEY_WORK_WINDOW_PACKAGES, emptySet())
-                updateWorkWindowSummary()
-                Toast.makeText(this, "Reset to default creator apps", Toast.LENGTH_SHORT).show()
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
-    }
-
-    private fun updateIntervalButtons() {
-        val selectedColor = android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#007AFF"))
-        val defaultColor = android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#2C2C2E"))
-
-        binding.btnIntervalDaily.backgroundTintList = if (selectedIntervalDays == 1) selectedColor else defaultColor
-        binding.btnInterval2Days.backgroundTintList = if (selectedIntervalDays == 2) selectedColor else defaultColor
-        binding.btnInterval3Days.backgroundTintList = if (selectedIntervalDays == 3) selectedColor else defaultColor
-    }
-
-    private fun updateWorkWindowSummary() {
-        val amPm = if (selectedWorkWindowStartHour >= 12) "PM" else "AM"
-        val hour12 = if (selectedWorkWindowStartHour % 12 == 0) 12 else selectedWorkWindowStartHour % 12
-        val timeStr = String.format(Locale.getDefault(), "%d:%02d %s", hour12, selectedWorkWindowStartMinute, amPm)
-        binding.btnPickWorkWindowTime.text = "Time: $timeStr"
-
-        val durationStr = if (selectedWorkWindowDurationMins < 60) "${selectedWorkWindowDurationMins}m" else "${selectedWorkWindowDurationMins / 60}h"
-        binding.btnPickWorkWindowDuration.text = "Duration: $durationStr"
-
-        val configuredApps = SecureStorage.getPackageSet(this, SecureStorage.KEY_WORK_WINDOW_PACKAGES)
-        binding.btnPickWorkWindowApps.text = if (configuredApps.isNotEmpty()) {
-            "Apps (${configuredApps.size})"
-        } else {
-            "Apps (Default)"
-        }
-
-        val intervalStr = when (selectedIntervalDays) {
-            1 -> "Daily"
-            2 -> "Every 2 days"
-            3 -> "Every 3 days"
-            else -> "Every $selectedIntervalDays days"
-        }
-        val summaryText = "$intervalStr at $timeStr ($durationStr)"
-        binding.tvWorkWindowSummary.text = summaryText
-    }
-
-    // --  Lock State Sync & Countdown  -----------------------------------------
-
-    private fun syncLockState() {
-        // ALWAYS FORCE CLEAN SLATE UNLOCK ON FIRST SCREEN DRAW:
-        val forceResetDone = SecureStorage.getBoolean(this, "force_clean_slate_v145", false)
-        if (!forceResetDone) {
-            Log.i("SetupWizard", "v1.4.5 Unconditional Clean Slate: Resetting 30-day lock and restoring all apps!")
-            SecureStorage.putBoolean(this, "force_clean_slate_v145", true)
-            activeCountdownJob?.cancel()
-            KioskRestoreManager.restoreAllApps(this)
-            showSetupMode()
-            loadApps()
-            return
-        }
-
-        val deviceContext = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            createDeviceProtectedStorageContext()
-        } else {
-            this
-        }
-        val sp = deviceContext.getSharedPreferences("focus_kiosk_prefs", Context.MODE_PRIVATE)
+    private fun readLockState(): Pair<Boolean, Long> {
+        val sp = createDeviceProtectedStorageContext().getSharedPreferences("focus_kiosk_prefs", Context.MODE_PRIVATE)
         val epochTime = sp.getLong("unlock_epoch_time", 0L)
         val secureTs = runCatching { SecureStorage.getUnlockTimestampMs(this) }.getOrDefault(0L)
         val unlockEpoch = if (epochTime > 0L) epochTime else secureTs
         val isLocked = sp.getBoolean("lock_active", false) || runCatching { SecureStorage.isLockActive(this) }.getOrDefault(false)
+        return isLocked to unlockEpoch
+    }
 
+    private fun render() {
+        val (isLocked, unlockAt) = readLockState()
         val now = System.currentTimeMillis()
-        if (isLocked && unlockEpoch in 1..now) {
-            Log.i("SetupWizard", "Unlock timestamp reached ($unlockEpoch <= $now) — restoring apps immediately!")
-            activeCountdownJob?.cancel()
+        if (isLocked && unlockAt in 1..now) {
+            Log.i("SetupWizard", "Unlock time reached — restoring apps.")
             KioskRestoreManager.restoreAllApps(this)
-            showSetupMode()
-            loadApps()
-        } else if (isLocked && unlockEpoch > now) {
-            showActiveLockMode(unlockEpoch)
+            renderSetup()
+        } else if (isLocked && unlockAt > now) {
+            renderLocked(unlockAt)
         } else {
-            showSetupMode()
+            renderSetup()
         }
     }
 
-    private fun showActiveLockMode(unlockEpoch: Long) {
-        binding.activeLockPanel.visibility = View.VISIBLE
-        binding.searchRowLayout.visibility = View.GONE
-        binding.rvSelectApps.visibility = View.GONE
-        binding.controlsPanel.visibility = View.GONE
-        binding.tvNoAppsFound.visibility = View.GONE
+    private fun resetLiveViews() {
+        form.clear()
+        updateRow = null
+        focusSection = null
+        heroCountdown = null
+        heroProgress = null
+        windowStatusRow = null
+        windowDoneRow = null
+    }
 
-        val timeFormat = SimpleDateFormat("EEEE, MMM d 'at' h:mm a", Locale.getDefault())
-        binding.tvActiveLockTargetDate.text = "Unlocks: ${timeFormat.format(Date(unlockEpoch))}"
+    private fun renderSetup() {
+        lockedUntil = 0L
+        resetLiveViews()
+        b.tvHeaderSubtitle.text = "Choose the apps you need. Everything else stays locked until the timer ends."
+        b.bottomBar.visibility = View.VISIBLE
+        updateBottomPadding()
 
-        activeCountdownJob?.cancel()
-        activeCountdownJob = lifecycleScope.launch {
-            while (true) {
-                val now = System.currentTimeMillis()
-                val remainingMs = unlockEpoch - now
-                if (remainingMs <= 0L) {
-                    binding.tvActiveLockCountdown.text = "00d 00h 00m 00s"
-                    delay(500L)
-                    KioskRestoreManager.restoreAllApps(this@SetupWizardActivity)
-                    showSetupMode()
-                    loadApps()
-                    break
+        addUpdateSection()
+        addFocusSetupSection()
+        addUploadWindowSetupSection()
+        addProtectionSection()
+        addAlarmSection()
+        addPortalSection()
+    }
+
+    private fun renderLocked(unlockAt: Long) {
+        lockedUntil = unlockAt
+        resetLiveViews()
+        b.tvHeaderSubtitle.text = "Focus Lock is on. Only your allowed apps open until it ends."
+        b.bottomBar.visibility = View.GONE
+        updateBottomPadding()
+
+        addLockHero(unlockAt)
+        addUploadWindowStatusSection()
+        addAlarmSection()
+        addPortalSection()
+        addUpdateSection()
+        onTick()
+    }
+
+    private fun onTick() {
+        val now = System.currentTimeMillis()
+        if (lockedUntil > 0L) {
+            val remaining = lockedUntil - now
+            if (remaining <= 0L) {
+                KioskRestoreManager.restoreAllApps(this)
+                render()
+                return
+            }
+            heroCountdown?.text = FocusFormat.countdown(remaining)
+            val startedAt = SecureStorage.getLong(this, SecureStorage.KEY_LOCK_START_MS, 0L)
+            if (startedAt in 1 until lockedUntil) {
+                heroProgress?.progress = (now - startedAt).toFloat() / (lockedUntil - startedAt)
+            }
+            updateWindowStatus(now)
+        } else {
+            refreshFocusFooter()
+        }
+    }
+
+    // ── Sections: setup mode ──────────────────────────────────────────────────
+
+    private fun addUpdateSection() {
+        val section = form.section()
+        updateRow = section.row(
+            "Software Update",
+            subtitle = updateSubtitle,
+            icon = R.drawable.ic_sym_gear,
+            iconColor = R.color.ios_gray,
+            value = updateValue ?: "v${BuildConfig.VERSION_NAME}",
+            chevron = true
+        ) { triggerUpdateFlow() }
+    }
+
+    private fun addFocusSetupSection() {
+        val section = form.section("Focus Lock")
+        focusSection = section
+        val durationRow = section.row("Duration", icon = R.drawable.ic_sym_hourglass, iconColor = R.color.ios_indigo)
+        lateinit var pill: TextView
+        pill = IosPill.create(this, FocusFormat.duration(durationMins)) {
+            FocusSheets.lockDuration(this, durationMins) { mins ->
+                durationMins = mins
+                SecureStorage.putInt(this, SecureStorage.KEY_LAST_DURATION_MINS, mins)
+                pill.text = FocusFormat.duration(mins)
+                refreshFocusFooter()
+            }
+        }
+        durationRow.setAccessory(pill)
+
+        val allowed = (SecureStorage.getPackageSet(this, SecureStorage.KEY_WHITELIST_PACKAGES) - packageName).size
+        section.row(
+            "Allowed Apps",
+            icon = R.drawable.ic_sym_apps,
+            iconColor = R.color.ios_blue,
+            value = if (allowed == 0) "None" else allowed.toString(),
+            chevron = true
+        ) { openAppPicker() }
+        refreshFocusFooter()
+    }
+
+    private fun refreshFocusFooter() {
+        val section = focusSection ?: return
+        val unlock = System.currentTimeMillis() + durationMins * 60_000L
+        section.setFooter("If you start now, everything except your allowed apps stays locked until ${FocusFormat.dayAndTime(unlock)}.")
+    }
+
+    private fun addUploadWindowSetupSection() {
+        val section = form.section("Upload Window")
+        val configRows = mutableListOf<IosRow>()
+
+        fun footer() {
+            val cfg = WorkWindowScheduler.config(this)
+            section.setFooter(
+                if (WorkWindowScheduler.isEnabled(this)) {
+                    "${FocusFormat.repeat(cfg.intervalDays)} at ${FocusFormat.time(cfg.hour, cfg.minute)}, your phone fully unlocks " +
+                        "for ${FocusFormat.duration(cfg.durationMins)} — every app, notification and website — so you can post to " +
+                        "Instagram, YouTube and more. Then it locks again by itself."
+                } else {
+                    "Turn on to unlock your phone on a schedule for uploading, then lock it again automatically."
                 }
-                val days = remainingMs / (24L * 3600_000L)
-                val hours = (remainingMs % (24L * 3600_000L)) / 3600_000L
-                val minutes = (remainingMs % 3600_000L) / 60_000L
-                val seconds = (remainingMs % 60_000L) / 1000L
-                binding.tvActiveLockCountdown.text = String.format(Locale.US, "%02dd %02dh %02dm %02ds", days, hours, minutes, seconds)
-
-                // Live upload window countdown
-                updateActiveWorkWindowLiveCountdown(now)
-
-                // Live extreme wake-up alarm countdown
-                updateActiveAlarmLiveCountdown(now)
-
-                delay(1000L)
-            }
-        }
-    }
-
-    private fun updateActiveWorkWindowLiveCountdown(now: Long) {
-        val isWorkWindowEnabled = SecureStorage.getBoolean(this, SecureStorage.KEY_WORK_WINDOW_ENABLED, false)
-        if (!isWorkWindowEnabled) {
-            binding.tvActiveWorkWindowStatus.text = "Upload Window: Disabled"
-            binding.tvActiveWorkWindowStatus.setTextColor(Color.parseColor("#8E8E93"))
-            binding.tvActiveWorkWindowCountdown.visibility = View.GONE
-            binding.tvActiveWorkWindowDetails.text = "No periodic upload windows configured."
-            return
-        }
-
-        binding.tvActiveWorkWindowCountdown.visibility = View.VISIBLE
-        val schedule = com.focuskiosk.policy.WorkWindowScheduler.calculateWindowSchedule(this, now)
-
-        if (schedule.isCurrentlyActive) {
-            val rem = (schedule.currentWindowEndMs - now).coerceAtLeast(0L)
-            val hours = rem / 3600_000L
-            val minutes = (rem % 3600_000L) / 60_000L
-            val seconds = (rem % 60_000L) / 1000L
-            binding.tvActiveWorkWindowStatus.text = "Upload Window: Active Now 🟢"
-            binding.tvActiveWorkWindowStatus.setTextColor(Color.parseColor("#34C759"))
-            binding.tvActiveWorkWindowCountdown.text = String.format(Locale.US, "Auto-locks in: %02dh %02dm %02ds", hours, minutes, seconds)
-            binding.tvActiveWorkWindowCountdown.setTextColor(Color.parseColor("#34C759"))
-            binding.tvActiveWorkWindowDetails.text = "Creator apps are temporarily accessible for video uploading."
-            binding.btnEndWorkWindowEarly.visibility = View.VISIBLE
-            binding.btnEndWorkWindowEarly.setOnClickListener {
-                Toast.makeText(this@SetupWizardActivity, "Re-locking upload apps immediately...", Toast.LENGTH_SHORT).show()
-                com.focuskiosk.policy.WorkWindowScheduler.onWindowEnd(this@SetupWizardActivity, isManualEarlyDone = true)
-                updateActiveWorkWindowLiveCountdown(System.currentTimeMillis())
-            }
-        } else {
-            binding.btnEndWorkWindowEarly.visibility = View.GONE
-            val rem = (schedule.nextWindowStartMs - now).coerceAtLeast(0L)
-            val days = rem / (24L * 3600_000L)
-            val hours = (rem % (24L * 3600_000L)) / 3600_000L
-            val minutes = (rem % 3600_000L) / 60_000L
-            val seconds = (rem % 60_000L) / 1000L
-
-            binding.tvActiveWorkWindowStatus.text = "Upload Window: Scheduled ⏱️"
-            binding.tvActiveWorkWindowStatus.setTextColor(Color.parseColor("#007AFF"))
-            binding.tvActiveWorkWindowCountdown.text = if (days > 0) {
-                String.format(Locale.US, "Opens in: %dd %02dh %02dm %02ds", days, hours, minutes, seconds)
-            } else {
-                String.format(Locale.US, "Opens in: %02dh %02dm %02ds", hours, minutes, seconds)
-            }
-            binding.tvActiveWorkWindowCountdown.setTextColor(Color.parseColor("#FF9F0A"))
-            val intervalDays = SecureStorage.getInt(this, SecureStorage.KEY_WORK_WINDOW_INTERVAL_DAYS, 1)
-            val intervalStr = if (intervalDays == 1) "Daily" else "Every $intervalDays days"
-            val durationMins = SecureStorage.getInt(this, SecureStorage.KEY_WORK_WINDOW_DURATION_MINS, 60)
-            binding.tvActiveWorkWindowDetails.text = "$intervalStr ($durationMins mins) apps unlock automatically for video uploads."
-        }
-    }
-
-    private fun updateActiveAlarmLiveCountdown(now: Long) {
-        val isAlarmEnabled = com.focuskiosk.alarm.ExtremeAlarmManager.isAlarmEnabled(this)
-        if (!isAlarmEnabled) {
-            binding.cardActiveAlarmStatus.visibility = View.GONE
-            return
-        }
-
-        binding.cardActiveAlarmStatus.visibility = View.VISIBLE
-        val alarmHour = SecureStorage.getInt(this, SecureStorage.KEY_ALARM_HOUR, 6)
-        val alarmMinute = SecureStorage.getInt(this, SecureStorage.KEY_ALARM_MINUTE, 30)
-        val amPm = if (alarmHour >= 12) "PM" else "AM"
-        val hour12 = if (alarmHour % 12 == 0) 12 else alarmHour % 12
-        binding.tvActiveAlarmTitle.text = String.format(Locale.getDefault(), "Extreme Alarm: %d:%02d %s ⏰", hour12, alarmMinute, amPm)
-
-        var nextAlarmMs = SecureStorage.getLong(this, SecureStorage.KEY_NEXT_ALARM_TIMESTAMP_MS, 0L)
-        if (nextAlarmMs <= now) {
-            nextAlarmMs = com.focuskiosk.alarm.ExtremeAlarmManager.calculateNextAlarmMs(this)
-            SecureStorage.putLong(this, SecureStorage.KEY_NEXT_ALARM_TIMESTAMP_MS, nextAlarmMs)
-        }
-
-        val rem = (nextAlarmMs - now).coerceAtLeast(0L)
-        val hours = rem / 3600_000L
-        val minutes = (rem % 3600_000L) / 60_000L
-        val seconds = (rem % 60_000L) / 1000L
-
-        binding.tvActiveAlarmCountdown.text = String.format(Locale.US, "Rings in: %02dh %02dm %02ds", hours, minutes, seconds)
-    }
-
-    private fun setupAlarmControls() {
-        val isEnabled = SecureStorage.getBoolean(this, SecureStorage.KEY_ALARM_ENABLED, true)
-        binding.switchExtremeAlarm.isChecked = isEnabled
-        binding.layoutAlarmConfig.visibility = if (isEnabled) View.VISIBLE else View.GONE
-
-        updateAlarmSummary()
-
-        binding.switchExtremeAlarm.setOnCheckedChangeListener { _, isChecked ->
-            SecureStorage.putBoolean(this, SecureStorage.KEY_ALARM_ENABLED, isChecked)
-            binding.layoutAlarmConfig.visibility = if (isChecked) View.VISIBLE else View.GONE
-            if (isChecked) {
-                com.focuskiosk.alarm.ExtremeAlarmManager.scheduleAlarm(this)
-                Toast.makeText(this, "Extreme Alarms Enabled", Toast.LENGTH_SHORT).show()
-            } else {
-                com.focuskiosk.alarm.ExtremeAlarmManager.cancelAlarm(this)
-                Toast.makeText(this, "Extreme Alarms Disabled", Toast.LENGTH_SHORT).show()
-            }
-        }
-
-        binding.btnAddAlarm.setOnClickListener {
-            val tpd = android.app.TimePickerDialog(
-                this,
-                { _, h, m ->
-                    val currentList = com.focuskiosk.alarm.ExtremeAlarmManager.getAlarms(this).toMutableList()
-                    currentList.add(com.focuskiosk.alarm.AlarmItem(hour = h, minute = m, label = "Wake up", isEnabled = true))
-                    com.focuskiosk.alarm.ExtremeAlarmManager.saveAlarms(this, currentList)
-                    updateAlarmSummary()
-                    if (binding.switchExtremeAlarm.isChecked) {
-                        com.focuskiosk.alarm.ExtremeAlarmManager.scheduleAlarm(this)
-                    }
-                    Toast.makeText(this, "Alarm added!", Toast.LENGTH_SHORT).show()
-                },
-                6,
-                30,
-                false
             )
-            tpd.show()
         }
 
-        binding.btnAlarmCredentials.setOnClickListener {
-            showAlarmCredentialsDialog()
+        section.switchRow(
+            "Upload Window",
+            icon = R.drawable.ic_sym_upload,
+            iconColor = R.color.ios_green,
+            checked = WorkWindowScheduler.isEnabled(this)
+        ) { on ->
+            WorkWindowScheduler.setEnabled(this, on)
+            configRows.forEach { it.setVisible(on) }
+            footer()
         }
 
-        binding.btnTestAlarm.setOnClickListener {
-            Toast.makeText(this, "⚡ Launching Test Alarm in 2 seconds...", Toast.LENGTH_SHORT).show()
-            lifecycleScope.launch {
-                delay(2000L)
-                SecureStorage.putBoolean(this@SetupWizardActivity, SecureStorage.KEY_ALARM_RINGING, true)
-                com.focuskiosk.alarm.ExtremeAlarmService.start(this@SetupWizardActivity)
-                val intent = Intent(this@SetupWizardActivity, com.focuskiosk.alarm.ExtremeAlarmActivity::class.java).apply {
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                }
-                startActivity(intent)
+        val cfg = WorkWindowScheduler.config(this)
+        val repeatRow = section.row("Repeat", subtitle = FocusFormat.repeat(cfg.intervalDays), icon = R.drawable.ic_sym_repeat, iconColor = R.color.ios_orange)
+        repeatRow.setAccessory(IosStepper(this, 1, WorkWindowScheduler.MAX_INTERVAL_DAYS, cfg.intervalDays) { days ->
+            WorkWindowScheduler.saveConfig(this, WorkWindowScheduler.config(this).copy(intervalDays = days))
+            repeatRow.subtitle = FocusFormat.repeat(days)
+            footer()
+        })
+
+        val startRow = section.row("Starts At", icon = R.drawable.ic_sym_clock, iconColor = R.color.ios_blue)
+        lateinit var startPill: TextView
+        startPill = IosPill.create(this, FocusFormat.time(cfg.hour, cfg.minute)) {
+            val c = WorkWindowScheduler.config(this)
+            FocusSheets.time(this, "Starts At", c.hour, c.minute) { h, m ->
+                WorkWindowScheduler.saveConfig(this, WorkWindowScheduler.config(this).copy(hour = h, minute = m))
+                startPill.text = FocusFormat.time(h, m)
+                footer()
+            }
+        }
+        startRow.setAccessory(startPill)
+
+        val lengthRow = section.row("Unlock For", icon = R.drawable.ic_sym_lock, iconColor = R.color.ios_teal)
+        lateinit var lengthPill: TextView
+        lengthPill = IosPill.create(this, FocusFormat.duration(cfg.durationMins)) {
+            FocusSheets.windowLength(this, WorkWindowScheduler.config(this).durationMins) { mins ->
+                WorkWindowScheduler.saveConfig(this, WorkWindowScheduler.config(this).copy(durationMins = mins))
+                lengthPill.text = FocusFormat.duration(mins)
+                footer()
+            }
+        }
+        lengthRow.setAccessory(lengthPill)
+
+        configRows.addAll(listOf(repeatRow, startRow, lengthRow))
+        configRows.forEach { it.setVisible(WorkWindowScheduler.isEnabled(this)) }
+        footer()
+    }
+
+    private fun addProtectionSection() {
+        val section = form.section("Protection", footer = "Leave USB Debugging unblocked if you use Iriun Webcam or connect the phone to your PC.")
+        section.switchRow(
+            "Block Factory Reset",
+            icon = R.drawable.ic_sym_reset,
+            iconColor = R.color.ios_red,
+            checked = SecureStorage.getBoolean(this, SecureStorage.KEY_BLOCK_FACTORY_RESET, true)
+        ) { SecureStorage.putBoolean(this, SecureStorage.KEY_BLOCK_FACTORY_RESET, it) }
+        section.switchRow(
+            "Block USB Debugging",
+            icon = R.drawable.ic_sym_usb,
+            iconColor = R.color.ios_gray,
+            checked = SecureStorage.getBoolean(this, SecureStorage.KEY_BLOCK_USB_DEBUGGING, false)
+        ) { SecureStorage.putBoolean(this, SecureStorage.KEY_BLOCK_USB_DEBUGGING, it) }
+    }
+
+    // ── Sections: locked mode ─────────────────────────────────────────────────
+
+    private fun addLockHero(unlockAt: Long) {
+        val section = form.section()
+        val hero = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(Ios.dp(context, 20f), Ios.dp(context, 24f), Ios.dp(context, 20f), Ios.dp(context, 22f))
+        }
+        hero.addView(Ios.iconTile(this, R.drawable.ic_sym_lock, R.color.ios_blue, 54f))
+        hero.addView(Ios.text(this, 17f, Ios.Weight.SEMIBOLD, R.color.ios_label, "Focus Lock Active").apply {
+            gravity = Gravity.CENTER
+            setPadding(0, Ios.dp(context, 14f), 0, 0)
+        })
+        heroCountdown = Ios.text(this, 46f, Ios.Weight.SEMIBOLD, R.color.ios_label).apply {
+            gravity = Gravity.CENTER
+            Ios.tabularDigits(this)
+            setPadding(0, Ios.dp(context, 6f), 0, 0)
+        }
+        hero.addView(heroCountdown)
+        hero.addView(Ios.text(this, 15f, Ios.Weight.REGULAR, R.color.ios_secondary_label,
+            "Unlocks " + SimpleDateFormat("EEEE, MMM d 'at' h:mm a", Locale.getDefault()).format(Date(unlockAt))).apply {
+            gravity = Gravity.CENTER
+            setPadding(0, Ios.dp(context, 4f), 0, 0)
+        })
+        heroProgress = IosProgressBar(this)
+        hero.addView(heroProgress, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ios.dp(this, 6f)).apply {
+            topMargin = Ios.dp(this@SetupWizardActivity, 18f)
+        })
+        section.addCustom(hero)
+    }
+
+    private fun addUploadWindowStatusSection() {
+        if (!WorkWindowScheduler.isEnabled(this)) {
+            form.section("Upload Window").row("Upload Window", icon = R.drawable.ic_sym_upload, iconColor = R.color.ios_green, value = "Off")
+            return
+        }
+        val cfg = WorkWindowScheduler.config(this)
+        val section = form.section(
+            "Upload Window",
+            footer = "${FocusFormat.repeat(cfg.intervalDays)} at ${FocusFormat.time(cfg.hour, cfg.minute)} for ${FocusFormat.duration(cfg.durationMins)}. " +
+                "During the window every app and website works; afterwards the lock comes back on its own."
+        )
+        windowStatusRow = section.row("Next Window", icon = R.drawable.ic_sym_upload, iconColor = R.color.ios_green)
+        windowDoneRow = section.buttonRow("I'm Done — Lock Now", R.color.ios_red, center = true) { confirmEarlyLock() }
+        windowDoneRow?.setVisible(false)
+        updateWindowStatus(System.currentTimeMillis())
+    }
+
+    private fun updateWindowStatus(now: Long) {
+        val row = windowStatusRow ?: return
+        val open = WorkWindowScheduler.isWindowActive(this)
+        val schedule = WorkWindowScheduler.calculateWindowSchedule(this, now)
+        if (open) {
+            val end = SecureStorage.getLong(this, SecureStorage.KEY_NEXT_WINDOW_END_MS, 0L)
+            row.title = "Open Now"
+            row.subtitle = "Locks again at " + SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date(end))
+            row.value = FocusFormat.countdown(end - now)
+            row.valueView.setTextColor(Ios.color(this, R.color.ios_green))
+            windowDoneRow?.setVisible(true)
+        } else {
+            row.title = "Next Window"
+            row.subtitle = FocusFormat.dayAndTime(schedule.nextWindowStartMs, now)
+            row.value = FocusFormat.relative(schedule.nextWindowStartMs - now)
+            row.valueView.setTextColor(Ios.color(this, R.color.ios_secondary_label))
+            windowDoneRow?.setVisible(false)
+        }
+        // Receivers drive the window; this only repairs a missed alarm while the screen is open.
+        if (schedule.isCurrentlyActive != open && now - lastWindowSync > 10_000L) {
+            lastWindowSync = now
+            lifecycleScope.launch(Dispatchers.IO) {
+                WorkWindowScheduler.checkAndSyncWindow(this@SetupWizardActivity)
             }
         }
     }
 
-    private fun updateAlarmSummary() {
-        val alarms = com.focuskiosk.alarm.ExtremeAlarmManager.getAlarms(this)
-        val activeCount = alarms.count { it.isEnabled }
-        val userId = SecureStorage.getString(this, SecureStorage.KEY_ALARM_USER_ID, "jisan")
-        binding.btnAlarmCredentials.text = "PC ID: $userId"
-        binding.tvAlarmSummary.text = "$activeCount active alarm${if (activeCount == 1) "" else "s"} (PC Dismissal)"
-
-        // Render dynamic Apple-style alarm list
-        binding.containerAlarmItems.removeAllViews()
-        for (alarm in alarms) {
-            val h12 = if (alarm.hour % 12 == 0) 12 else alarm.hour % 12
-            val amPm = if (alarm.hour >= 12) "PM" else "AM"
-            val timeText = String.format(Locale.getDefault(), "%d:%02d %s", h12, alarm.minute, amPm)
-
-            val row = android.widget.LinearLayout(this).apply {
-                orientation = android.widget.LinearLayout.HORIZONTAL
-                gravity = android.view.Gravity.CENTER_VERTICAL
-                setPadding(8, 4, 8, 4)
-            }
-
-            val tvTime = android.widget.TextView(this).apply {
-                layoutParams = android.widget.LinearLayout.LayoutParams(0, android.view.ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-                text = timeText
-                setTextColor(if (alarm.isEnabled) Color.WHITE else Color.parseColor("#8E8E93"))
-                textSize = 15f
-                typeface = android.graphics.Typeface.DEFAULT_BOLD
-            }
-
-            val sw = com.google.android.material.switchmaterial.SwitchMaterial(this).apply {
-                isChecked = alarm.isEnabled
-                thumbTintList = android.content.res.ColorStateList.valueOf(Color.WHITE)
-                trackTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#007AFF"))
-                setOnCheckedChangeListener { _, checked ->
-                    val updated = alarms.map { if (it.id == alarm.id) it.copy(isEnabled = checked) else it }
-                    com.focuskiosk.alarm.ExtremeAlarmManager.saveAlarms(this@SetupWizardActivity, updated)
-                    updateAlarmSummary()
-                    if (binding.switchExtremeAlarm.isChecked) {
-                        com.focuskiosk.alarm.ExtremeAlarmManager.scheduleAlarm(this@SetupWizardActivity)
-                    }
+    private fun confirmEarlyLock() {
+        val next = WorkWindowScheduler.calculateWindowSchedule(this, System.currentTimeMillis() + 60_000L).nextWindowStartMs
+        IosAlert(this)
+            .title("Lock Now?")
+            .message("Everything locks again right away. The next upload window opens ${FocusFormat.dayAndTime(next)}.")
+            .action("Cancel", IosAlert.Style.CANCEL)
+            .action("Lock Now", IosAlert.Style.DESTRUCTIVE) {
+                lifecycleScope.launch {
+                    withContext(Dispatchers.IO) { WorkWindowScheduler.onWindowEnd(this@SetupWizardActivity, isManualEarlyDone = true) }
+                    IosHud.show(this@SetupWizardActivity, "Locked", R.drawable.ic_sym_lock)
+                    render()
                 }
             }
-
-            val btnDelete = android.widget.ImageView(this).apply {
-                setImageResource(android.R.drawable.ic_menu_delete)
-                setColorFilter(Color.parseColor("#FF3B30"))
-                setPadding(12, 0, 0, 0)
-                setOnClickListener {
-                    val updated = alarms.filter { it.id != alarm.id }
-                    com.focuskiosk.alarm.ExtremeAlarmManager.saveAlarms(this@SetupWizardActivity, updated)
-                    updateAlarmSummary()
-                    if (binding.switchExtremeAlarm.isChecked) {
-                        com.focuskiosk.alarm.ExtremeAlarmManager.scheduleAlarm(this@SetupWizardActivity)
-                    }
-                }
-            }
-
-            row.addView(tvTime)
-            row.addView(sw)
-            row.addView(btnDelete)
-            binding.containerAlarmItems.addView(row)
-        }
-    }
-
-    private fun showAlarmCredentialsDialog() {
-        val context = this
-        val userId = SecureStorage.getString(context, SecureStorage.KEY_ALARM_USER_ID, "jisan")
-        val password = SecureStorage.getString(context, SecureStorage.KEY_ALARM_PASSWORD, "1234")
-
-        val layout = android.widget.LinearLayout(context).apply {
-            orientation = android.widget.LinearLayout.VERTICAL
-            setPadding(50, 40, 50, 20)
-        }
-
-        val tvHint = android.widget.TextView(context).apply {
-            text = "Set the ID & Password you will enter on your PC Web Portal to get the dismissal code:"
-            setTextColor(Color.parseColor("#8E8E93"))
-            textSize = 13f
-            setPadding(0, 0, 0, 24)
-        }
-
-        val etUser = android.widget.EditText(context).apply {
-            hint = "PC User ID (e.g. jisan)"
-            setText(userId)
-            setTextColor(Color.WHITE)
-            setHintTextColor(Color.parseColor("#636366"))
-        }
-
-        val etPass = android.widget.EditText(context).apply {
-            hint = "PC Password (e.g. 1234)"
-            setText(password)
-            setTextColor(Color.WHITE)
-            setHintTextColor(Color.parseColor("#636366"))
-            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
-        }
-
-        layout.addView(tvHint)
-        layout.addView(etUser)
-        layout.addView(etPass)
-
-        androidx.appcompat.app.AlertDialog.Builder(context, androidx.appcompat.R.style.Theme_AppCompat_Dialog_Alert)
-            .setTitle("🖥️ PC Web Portal Credentials")
-            .setView(layout)
-            .setPositiveButton("Save") { _, _ ->
-                val newId = etUser.text.toString().trim()
-                val newPass = etPass.text.toString().trim()
-                if (newId.isNotEmpty()) {
-                    SecureStorage.putString(context, SecureStorage.KEY_ALARM_USER_ID, newId)
-                }
-                if (newPass.isNotEmpty()) {
-                    SecureStorage.putString(context, SecureStorage.KEY_ALARM_PASSWORD, newPass)
-                }
-                updateAlarmSummary()
-                Toast.makeText(context, "Credentials Saved!", Toast.LENGTH_SHORT).show()
-            }
-            .setNegativeButton("Cancel", null)
             .show()
     }
 
-    private fun showSetupMode() {
-        binding.activeLockPanel.visibility = View.GONE
-        binding.searchRowLayout.visibility = View.VISIBLE
-        binding.rvSelectApps.visibility = View.VISIBLE
-        binding.controlsPanel.visibility = View.VISIBLE
-        binding.btnActivateLock.isEnabled = true
+    // ── Shared sections: alarms & PC portal ───────────────────────────────────
+
+    private fun addAlarmSection() {
+        val alarms = ExtremeAlarmManager.getAlarms(this)
+        val next = ExtremeAlarmManager.nextAlarm(this)
+        val footer = buildString {
+            append(if (next != null) "Next alarm ${FocusFormat.dayAndTime(next.second)}. " else "No alarms are on. ")
+            append("Alarms ring at full volume and stop only with the 12-digit code from your PC.")
+        }
+        val section = form.section("Alarms", footer = footer, action = "Add") {
+            FocusSheets.alarmEditor(this, null) { render() }
+        }
+        if (alarms.isEmpty()) {
+            section.addCustom(Ios.centered(Ios.text(this, 17f, Ios.Weight.REGULAR, R.color.ios_secondary_label, "No Alarms")).apply {
+                setPadding(0, Ios.dp(context, 22f), 0, Ios.dp(context, 22f))
+            })
+        }
+        alarms.forEach { section.addCustom(alarmRow(it)) }
+        section.buttonRow("Test Alarm", icon = R.drawable.ic_sym_bolt, iconColor = R.color.ios_orange) { confirmTestAlarm() }
     }
 
-    // --  Confirm & apply  ----------------------------------------------------
+    private fun alarmRow(alarm: AlarmItem): View {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(Ios.dp(context, 16f), Ios.dp(context, 8f), Ios.dp(context, 16f), Ios.dp(context, 10f))
+            background = Ios.cellHighlight(context)
+            setOnClickListener { FocusSheets.alarmEditor(this@SetupWizardActivity, alarm) { render() } }
+        }
+        val texts = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        val timeLine = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            isBaselineAligned = true
+        }
+        val h12 = if (alarm.hour % 12 == 0) 12 else alarm.hour % 12
+        val time = Ios.text(this, 46f, Ios.Weight.LIGHT, R.color.ios_label, String.format(Locale.US, "%d:%02d", h12, alarm.minute)).apply {
+            Ios.tabularDigits(this)
+            letterSpacing = -0.03f
+        }
+        val ampm = Ios.text(this, 26f, Ios.Weight.LIGHT, R.color.ios_label, if (alarm.hour >= 12) "PM" else "AM").apply {
+            setPadding(Ios.dp(context, 3f), 0, 0, 0)
+        }
+        timeLine.addView(time)
+        timeLine.addView(ampm)
+        val detail = Ios.text(this, 15f, Ios.Weight.REGULAR, R.color.ios_label,
+            if (alarm.isRepeating) {
+                val repeat = alarm.repeatSummary()
+                "${alarm.label}, ${if (repeat.startsWith("Every") || repeat.startsWith("Week")) repeat.lowercase() else repeat}"
+            } else alarm.label
+        ).apply { setPadding(0, Ios.dp(context, 2f), 0, 0) }
+        texts.addView(timeLine)
+        texts.addView(detail)
+
+        fun tint(on: Boolean) {
+            val c = Ios.color(this, if (on) R.color.ios_label else R.color.ios_secondary_label)
+            time.setTextColor(c)
+            ampm.setTextColor(c)
+            detail.setTextColor(c)
+        }
+        tint(alarm.isEnabled)
+
+        val sw = IosSwitch(this).apply {
+            setChecked(alarm.isEnabled)
+            onCheckedChange = { on ->
+                ExtremeAlarmManager.setEnabled(this@SetupWizardActivity, alarm.id, on)
+                tint(on)
+                if (on) {
+                    ExtremeAlarmManager.nextAlarm(this@SetupWizardActivity)?.let { (item, at) ->
+                        if (item.id == alarm.id) IosHud.show(this@SetupWizardActivity, FocusFormat.relative(at - System.currentTimeMillis()).replaceFirstChar { it.uppercase() }, R.drawable.ic_sym_alarm)
+                    }
+                }
+                handler.postDelayed({ render() }, 350L)
+            }
+        }
+        row.addView(texts)
+        row.addView(sw)
+        return row
+    }
+
+    private fun confirmTestAlarm() {
+        IosAlert(this)
+            .title("Test Alarm")
+            .message("The alarm rings now at full volume. To stop it, open ${AlarmStore.PORTAL_URL_DISPLAY} on your PC, sign in, and type the code shown there.")
+            .action("Cancel", IosAlert.Style.CANCEL)
+            .action("Ring Now", IosAlert.Style.PREFERRED) {
+                ExtremeAlarmManager.startRinging(this, ExtremeAlarmActivity.TEST_ALARM_ID)
+            }
+            .show()
+    }
+
+    private fun addPortalSection() {
+        val user = AlarmStore.portalUser(this)
+        val pass = AlarmStore.portalPassword(this)
+        val section = form.section(
+            "PC Portal",
+            footer = "When an alarm rings, open the portal on your PC, sign in with this ID and password, and type the code into your phone. " +
+                "Key check ${AlarmCodeGenerator.keyCheck(user, pass)} — the portal shows the same check when your details match."
+        )
+        section.row("Portal Address", subtitle = AlarmStore.PORTAL_URL_DISPLAY, icon = R.drawable.ic_sym_desktop, iconColor = R.color.ios_indigo) {
+            Ios.copyToClipboard(this, "Portal", AlarmStore.PORTAL_URL)
+            IosHud.show(this, "Link Copied")
+        }
+        section.row("Portal ID", icon = R.drawable.ic_sym_person, iconColor = R.color.ios_blue, value = user, chevron = true) {
+            FocusSheets.portalCredentials(this) { render() }
+        }
+        section.row("Password", icon = R.drawable.ic_sym_key, iconColor = R.color.ios_gray, value = "•".repeat(pass.length.coerceIn(4, 10)), chevron = true) {
+            FocusSheets.portalCredentials(this) { render() }
+        }
+    }
+
+    // ── Software update ───────────────────────────────────────────────────────
+
+    private fun triggerUpdateFlow() {
+        if (updateBusy || !::b.isInitialized) return
+        updateBusy = true
+        setUpdateState("Checking…", null)
+        lifecycleScope.launch {
+            com.focuskiosk.updater.SilentUpdateManager.checkAndInstallUpdateWithProgress(this@SetupWizardActivity) { percent, status ->
+                val failed = status.startsWith("Failed") || status.contains("failed", ignoreCase = true) || status.startsWith("Update error")
+                when {
+                    status.startsWith("Already") -> setUpdateState("Up to Date", null)
+                    failed -> setUpdateState("Try Again", "Couldn't reach GitHub")
+                    status.startsWith("New version") -> setUpdateState("Downloading…", status.substringBefore(" found").removePrefix("New version ") + " available")
+                    status.startsWith("Downloading") -> setUpdateState("$percent%", "Downloading update")
+                    status.startsWith("Installing") -> setUpdateState("Installing…", "The app restarts by itself")
+                    status.startsWith("Installation") -> setUpdateState("Restarting…", "The app restarts by itself")
+                }
+                if (percent >= 100 || failed) updateBusy = false
+            }
+        }
+    }
+
+    private fun setUpdateState(value: String, subtitle: String?) {
+        updateValue = value
+        updateSubtitle = subtitle
+        updateRow?.value = value
+        updateRow?.subtitle = subtitle
+    }
+
+    // ── Starting the lock ─────────────────────────────────────────────────────
+
+    private fun openAppPicker() {
+        startActivity(Intent(this, AppPickerActivity::class.java))
+        @Suppress("DEPRECATION")
+        overridePendingTransition(R.anim.ios_push_in, R.anim.ios_push_out)
+    }
 
     private fun confirmActivation() {
         ensureNotificationPermission()
-        val durationMs = selectedDurationMs()
-        if (durationMs <= 0L) {
-            Toast.makeText(this, "Please select a lock duration.", Toast.LENGTH_LONG).show()
-            return
-        }
-
-        val whitelist = selectAdapter.getSelectedPackages()
+        val whitelist = SecureStorage.getPackageSet(this, SecureStorage.KEY_WHITELIST_PACKAGES) - packageName
         if (whitelist.isEmpty()) {
-            Toast.makeText(this, "Please select at least one app to keep accessible.", Toast.LENGTH_LONG).show()
+            IosAlert(this)
+                .title("Choose Allowed Apps")
+                .message("Pick at least one app that should stay available during the lock.")
+                .action("Cancel", IosAlert.Style.CANCEL)
+                .action("Choose Apps", IosAlert.Style.PREFERRED) { openAppPicker() }
+                .show()
             return
         }
-
-        val unlockTs = System.currentTimeMillis() + durationMs
-        val previewText = binding.tvDurationPreview.text.toString()
-
-        // Directly show Apple confirmation dialog without blocking on accessibility service
-        showAppleLockConfirmDialog(whitelist, unlockTs, previewText)
-    }
-
-    private fun showAppleEscapeGuardDialog(whitelist: Set<String>, unlockTs: Long, previewText: String) {
-        val dialog = Dialog(this)
-        val dialogBinding = com.focuskiosk.databinding.DialogIosEscapeGuardBinding.inflate(layoutInflater)
-        dialog.setContentView(dialogBinding.root)
-        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
-        val width = (resources.displayMetrics.widthPixels * 0.90).toInt()
-        dialog.window?.setLayout(width, ViewGroup.LayoutParams.WRAP_CONTENT)
-
-        // Step 1: Open App Info for 3 dots -> Allow restricted settings
-        dialogBinding.btnOpenAppInfo.setOnClickListener {
-            runCatching {
-                val intent = Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                    data = android.net.Uri.parse("package:$packageName")
-                }
-                startActivity(intent)
-            }.onFailure {
-                Toast.makeText(this, "Could not open App Info", Toast.LENGTH_SHORT).show()
-            }
-        }
-
-        // Step 2: Open Accessibility Settings
-        dialogBinding.btnOpenAccessibility.setOnClickListener {
-            startActivity(Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS))
-            dialog.dismiss()
-        }
-
-        // Action 3: Continue Without Guard
-        dialogBinding.btnContinueAnyway.setOnClickListener {
-            dialog.dismiss()
-            showAppleLockConfirmDialog(whitelist, unlockTs, previewText)
-        }
-
-        dialog.show()
-    }
-
-    private fun showAppleLockConfirmDialog(whitelist: Set<String>, unlockTs: Long, previewText: String) {
-        val dialog = Dialog(this)
-        val dialogBinding = com.focuskiosk.databinding.DialogIosConfirmLockBinding.inflate(layoutInflater)
-        dialog.setContentView(dialogBinding.root)
-        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
-        val width = (resources.displayMetrics.widthPixels * 0.90).toInt()
-        dialog.window?.setLayout(width, ViewGroup.LayoutParams.WRAP_CONTENT)
-        dialog.setCancelable(false)
-
-        dialogBinding.tvConfirmDuration.text = previewText
-        dialogBinding.tvConfirmWhitelistCount.text = "${whitelist.size} apps will remain accessible"
-
-        dialogBinding.btnConfirmLockNow.setOnClickListener {
-            dialog.dismiss()
-            applyLock(whitelist, unlockTs)
-        }
-
-        dialogBinding.btnConfirmCancel.setOnClickListener {
-            dialog.dismiss()
-        }
-
-        dialog.show()
+        val unlockTs = System.currentTimeMillis() + durationMins * 60_000L
+        val windowNote = if (WorkWindowScheduler.isEnabled(this)) {
+            val c = WorkWindowScheduler.config(this)
+            "\n\nUpload window: ${FocusFormat.repeat(c.intervalDays).lowercase()} at ${FocusFormat.time(c.hour, c.minute)} for ${FocusFormat.duration(c.durationMins)}."
+        } else ""
+        IosAlert(this)
+            .title("Start Focus Lock?")
+            .message("${whitelist.size} apps stay available. Everything else locks until ${FocusFormat.dayAndTime(unlockTs)}.$windowNote\n\nThe lock can't be turned off early.")
+            .action("Cancel", IosAlert.Style.CANCEL)
+            .action("Lock", IosAlert.Style.DESTRUCTIVE) { applyLock(whitelist, System.currentTimeMillis() + durationMins * 60_000L) }
+            .show()
     }
 
     private fun applyLock(whitelist: Set<String>, unlockTs: Long) {
         val finalWhitelist = whitelist + packageName
+        b.btnPrimary.isEnabled = false
+        b.btnPrimary.text = "Locking…"
 
-        binding.btnActivateLock.isEnabled = false
-        Toast.makeText(this, "Activating Focus Lock...", Toast.LENGTH_SHORT).show()
-
-        // 1. Persist settings
         SecureStorage.putPackageSet(this, SecureStorage.KEY_WHITELIST_PACKAGES, finalWhitelist)
         SecureStorage.putLong(this, SecureStorage.KEY_UNLOCK_TIMESTAMP_MS, unlockTs)
+        SecureStorage.putLong(this, SecureStorage.KEY_LOCK_START_MS, System.currentTimeMillis())
+        // Persist the switches exactly as shown (PolicyEnforcer's own defaults differ for unset keys).
         SecureStorage.putBoolean(this, SecureStorage.KEY_BLOCK_FACTORY_RESET,
-            binding.switchFactoryReset.isChecked)
+            SecureStorage.getBoolean(this, SecureStorage.KEY_BLOCK_FACTORY_RESET, true))
         SecureStorage.putBoolean(this, SecureStorage.KEY_BLOCK_USB_DEBUGGING,
-            binding.switchUsbDebugging.isChecked)
+            SecureStorage.getBoolean(this, SecureStorage.KEY_BLOCK_USB_DEBUGGING, false))
 
-        // Persist work window settings
-        val workWindowEnabled = binding.switchWorkWindow.isChecked
-        SecureStorage.putBoolean(this, SecureStorage.KEY_WORK_WINDOW_ENABLED, workWindowEnabled)
-        SecureStorage.putInt(this, SecureStorage.KEY_WORK_WINDOW_INTERVAL_DAYS, selectedIntervalDays)
-        SecureStorage.putInt(this, SecureStorage.KEY_WORK_WINDOW_START_HOUR, selectedWorkWindowStartHour)
-        SecureStorage.putInt(this, SecureStorage.KEY_WORK_WINDOW_START_MINUTE, selectedWorkWindowStartMinute)
-        SecureStorage.putInt(this, SecureStorage.KEY_WORK_WINDOW_DURATION_MINS, selectedWorkWindowDurationMins)
+        // Upload window cadence starts today; a window already in progress is skipped.
+        val windowEnabled = WorkWindowScheduler.isEnabled(this)
+        SecureStorage.putBoolean(this, SecureStorage.KEY_WORK_WINDOW_ACTIVE, false)
+        WorkWindowScheduler.resetAnchor(this)
+        WorkWindowScheduler.skipCurrentWindow(this)
 
-        val anchorCal = java.util.Calendar.getInstance().apply {
-            set(java.util.Calendar.HOUR_OF_DAY, selectedWorkWindowStartHour)
-            set(java.util.Calendar.MINUTE, selectedWorkWindowStartMinute)
-            set(java.util.Calendar.SECOND, 0)
-            set(java.util.Calendar.MILLISECOND, 0)
-        }
-        SecureStorage.putLong(this, SecureStorage.KEY_WORK_WINDOW_ANCHOR_MS, anchorCal.timeInMillis)
+        // Plain + Direct Boot prefs let the watchdog and boot receiver read the lock instantly
+        val prefs = listOf(
+            getSharedPreferences("focus_kiosk_prefs", Context.MODE_PRIVATE),
+            createDeviceProtectedStorageContext().getSharedPreferences("focus_kiosk_prefs", Context.MODE_PRIVATE)
+        )
+        prefs.forEach { it.edit().putLong("unlock_epoch_time", unlockTs).putBoolean("lock_active", true).apply() }
 
-        // Persist Extreme Wake-up Alarm settings
-        val alarmEnabled = binding.switchExtremeAlarm.isChecked
-        SecureStorage.putBoolean(this, SecureStorage.KEY_ALARM_ENABLED, alarmEnabled)
-        if (alarmEnabled) {
-            com.focuskiosk.alarm.ExtremeAlarmManager.scheduleAlarm(this)
-        } else {
-            com.focuskiosk.alarm.ExtremeAlarmManager.cancelAlarm(this)
-        }
-
-        // Save directly to unencrypted SharedPreferences for instant access by Watchdog & AlarmManager
-        getSharedPreferences("focus_kiosk_prefs", android.content.Context.MODE_PRIVATE).edit()
-            .putLong("unlock_epoch_time", unlockTs)
-            .putBoolean("lock_active", true)
-            .apply()
-
-        // Also save to DirectBoot Device Protected Storage so BootReceiver can access before screen unlock
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
-            runCatching {
-                createDeviceProtectedStorageContext()
-                    .getSharedPreferences("focus_kiosk_prefs", android.content.Context.MODE_PRIVATE).edit()
-                    .putLong("unlock_epoch_time", unlockTs)
-                    .putBoolean("lock_active", true)
-                    .apply()
-            }
-        }
-
-        // 2. Safe background execution
         lifecycleScope.launch(Dispatchers.IO) {
             try {
                 PolicyEnforcer.activateFocusLock(this@SetupWizardActivity)
-                // Start sticky foreground countdown service
                 com.focuskiosk.service.FocusCountdownService.start(this@SetupWizardActivity, unlockTs)
-                // Schedule dual fail-safe (AlarmManager + WorkManager) for exact unlock restoration
-                com.focuskiosk.policy.KioskRestoreManager.scheduleFailSafe(this@SetupWizardActivity, unlockTs)
-                // Schedule work / upload window if enabled
-                if (workWindowEnabled) {
-                    com.focuskiosk.policy.WorkWindowScheduler.scheduleNextWindow(this@SetupWizardActivity)
-                }
+                KioskRestoreManager.scheduleFailSafe(this@SetupWizardActivity, unlockTs)
+                if (windowEnabled) WorkWindowScheduler.scheduleNextWindow(this@SetupWizardActivity)
             } catch (e: Exception) {
                 Log.e("SetupWizard", "Error activating focus lock", e)
             }
-
             withContext(Dispatchers.Main) {
                 SecureStorage.setSetupCompleted(this@SetupWizardActivity, true)
-
-                // NOTE: We deliberately DO NOT disable SetupWizardActivity component.
-                // Keeping the component enabled ensures the app icon is never removed from the phone!
-
-                // Return user to the native stock home launcher
-                val homeIntent = Intent(Intent.ACTION_MAIN).apply {
-                    addCategory(Intent.CATEGORY_HOME)
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                }
-                startActivity(homeIntent)
-                syncLockState()
+                b.btnPrimary.isEnabled = true
+                b.btnPrimary.text = "Start Focus Lock"
+                startActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                render()
             }
         }
     }
 
-
-
-    // --  Error  ---------------------------------------------------------------
-
     private fun showOwnerError() {
-        AlertDialog.Builder(this)
-            .setTitle("Device Owner Required")
-            .setMessage(
-                "Run this ADB command after factory reset:\n\n" +
-                "adb shell dpm set-device-owner \\\n" +
-                "  ${packageName}/.admin.FocusDeviceAdminReceiver"
-            )
-            .setPositiveButton("OK") { _, _ -> finish() }
-            .setCancelable(false)
+        IosAlert(this)
+            .title("Device Owner Required")
+            .message("Run this ADB command after a factory reset:\n\nadb shell dpm set-device-owner $packageName/com.focuskiosk.admin.FocusDeviceAdminReceiver")
+            .action("OK", IosAlert.Style.PREFERRED) { finish() }
             .show()
     }
 }

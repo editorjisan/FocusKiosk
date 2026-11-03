@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- iOS system colors (dark appearance). -->
+<resources>
+    <color name="ios_bg">#000000</color>
+    <color name="ios_cell">#1C1C1E</color>
+    <color name="ios_cell_pressed">#2C2C2E</color>
+    <color name="ios_sheet">#1C1C1E</color>
+    <color name="ios_alert">#2C2C2E</color>
+    <color name="ios_label">#FFFFFF</color>
+    <color name="ios_secondary_label">#99EBEBF5</color>
+    <color name="ios_tertiary_label">#4DEBEBF5</color>
+    <color name="ios_separator">#38383A</color>
+    <color name="ios_fill">#3D767680</color>
+    <color name="ios_fill_strong">#5C767680</color>
+    <color name="ios_switch_off">#39393D</color>
+    <color name="ios_nav_bar">#FA161616</color>
+    <color name="ios_scrim">#99000000</color>
+    <color name="ios_cell_elevated">#2C2C2E</color>
+    <color name="ios_separator_elevated">#48484A</color>
+    <color name="ios_segment_selected">#636366</color>
+    <color name="ios_hud">#E62C2C2E</color>
+
+    <color name="ios_blue">#0A84FF</color>
+    <color name="ios_green">#30D158</color>
+    <color name="ios_red">#FF453A</color>
+    <color name="ios_orange">#FF9F0A</color>
+    <color name="ios_yellow">#FFD60A</color>
+    <color name="ios_indigo">#5E5CE6</color>
+    <color name="ios_purple">#BF5AF2</color>
+    <color name="ios_pink">#FF375F</color>
+    <color name="ios_teal">#40C8E0</color>
+    <color name="ios_gray">#8E8E93</color>
+</resources>
