@@ -12,14 +12,15 @@ class AlarmCodeGeneratorTest {
     fun matchesPortalVectors() {
         assertEquals("275955462717", AlarmCodeGenerator.codeForStep("jisan", "1234", 14868000))
         assertEquals("658106945536", AlarmCodeGenerator.codeForStep("Jisan ", "1234", 14868001))
-        assertEquals("121481975949", AlarmCodeGenerator.codeForStep("editor", "p@ss word", 0))
+        assertEquals("222009283229", AlarmCodeGenerator.codeForStep("Jisan ", "k7q2-m9xd", 14868001))
+        assertEquals("222009283229", AlarmCodeGenerator.codeForStep("jisan", "K7Q2M9XD", 14868001))
         assertEquals("039646448297", AlarmCodeGenerator.codeForStep("x", "", 99999999))
     }
 
     @Test
     fun keyCheckMatchesPortal() {
         assertEquals("35F7", AlarmCodeGenerator.keyCheck("jisan", "1234"))
-        assertEquals("5FC4", AlarmCodeGenerator.keyCheck("editor", "p@ss word"))
+        assertEquals("B860", AlarmCodeGenerator.keyCheck("jisan", "K7Q2-M9XD"))
         assertEquals("8264", AlarmCodeGenerator.keyCheck("x", ""))
     }
 

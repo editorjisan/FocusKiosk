@@ -24,7 +24,6 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
 import com.focuskiosk.BuildConfig
 import com.focuskiosk.R
-import com.focuskiosk.alarm.AlarmCodeGenerator
 import com.focuskiosk.alarm.AlarmItem
 import com.focuskiosk.alarm.AlarmStore
 import com.focuskiosk.alarm.ExtremeAlarmActivity
@@ -589,7 +588,7 @@ open class SetupWizardActivity : AppCompatActivity() {
     private fun confirmTestAlarm() {
         IosAlert(this)
             .title("Test Alarm")
-            .message("The alarm rings now at full volume. To stop it, open ${AlarmStore.PORTAL_URL_DISPLAY} on your PC, sign in, and type the code shown there.")
+            .message("The alarm rings now at full volume. Its screen shows a one-time password: sign in with it on ${AlarmStore.PORTAL_URL_DISPLAY} from your PC, then type the code shown there.")
             .action("Cancel", IosAlert.Style.CANCEL)
             .action("Ring Now", IosAlert.Style.PREFERRED) {
                 ExtremeAlarmManager.startRinging(this, ExtremeAlarmActivity.TEST_ALARM_ID)
@@ -599,22 +598,20 @@ open class SetupWizardActivity : AppCompatActivity() {
 
     private fun addPortalSection() {
         val user = AlarmStore.portalUser(this)
-        val pass = AlarmStore.portalPassword(this)
         val section = form.section(
             "PC Portal",
-            footer = "When an alarm rings, open the portal on your PC, sign in with this ID and password, and type the code into your phone. " +
-                "Key check ${AlarmCodeGenerator.keyCheck(user, pass)} — the portal shows the same check when your details match."
+            footer = "When an alarm rings, its screen shows your ID and a new one-time password. Sign in with them on your PC " +
+                "and type the 12-digit code it shows. Each password works for one alarm only, so a password someone sees is useless " +
+                "and there is no saved password anyone could change to lock you out."
         )
         section.row("Portal Address", subtitle = AlarmStore.PORTAL_URL_DISPLAY, icon = R.drawable.ic_sym_desktop, iconColor = R.color.ios_indigo) {
             Ios.copyToClipboard(this, "Portal", AlarmStore.PORTAL_URL)
             IosHud.show(this, "Link Copied")
         }
         section.row("Portal ID", icon = R.drawable.ic_sym_person, iconColor = R.color.ios_blue, value = user, chevron = true) {
-            FocusSheets.portalCredentials(this) { render() }
+            FocusSheets.portalId(this) { render() }
         }
-        section.row("Password", icon = R.drawable.ic_sym_key, iconColor = R.color.ios_gray, value = "•".repeat(pass.length.coerceIn(4, 10)), chevron = true) {
-            FocusSheets.portalCredentials(this) { render() }
-        }
+        section.row("Password", icon = R.drawable.ic_sym_key, iconColor = R.color.ios_gray, value = "New every alarm")
     }
 
     // ── Software update ───────────────────────────────────────────────────────

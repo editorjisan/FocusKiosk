@@ -11,9 +11,13 @@ import javax.crypto.spec.SecretKeySpec
  * ──────────────────
  * 12-digit rotating dismissal codes shared with the PC portal (docs/index.html).
  *
- *   code(step) = HMAC-SHA256(key = password, msg = "focuskiosk:v2:<id>:<step>")
+ *   code(step) = HMAC-SHA256(key = one-time password, msg = "focuskiosk:v2:<id>:<step>")
  *                → dynamic truncation to 63 bits → mod 10^12, zero-padded
  *   step       = unix seconds / 120   (a new code every 2 minutes)
+ *
+ * The password is created when an alarm starts ringing (see AlarmStore), shown on the alarm
+ * screen and discarded on dismissal, so a password someone has seen is useless and there is
+ * no saved password anyone could change to lock the user out.
  *
  * The phone accepts the last [ACCEPT_PAST_STEPS] steps plus one future step, so a code
  * stays usable for about 10 minutes — long enough to walk from the PC to the phone,
@@ -31,8 +35,12 @@ object AlarmCodeGenerator {
 
     fun stepAt(epochMs: Long): Long = Math.floorDiv(epochMs / 1000L, STEP_SECONDS)
 
+    /** Case, spaces and dashes don't matter: "k7q2-m9xd" and "K7Q2M9XD" are the same password. */
+    fun normalizePassword(password: String): String =
+        password.uppercase(Locale.ROOT).filter { it in 'A'..'Z' || it in '0'..'9' }
+
     private fun mac(password: String): Mac {
-        val key = password.trim().ifEmpty { FALLBACK_KEY }.toByteArray(Charsets.UTF_8)
+        val key = normalizePassword(password).ifEmpty { FALLBACK_KEY }.toByteArray(Charsets.UTF_8)
         return Mac.getInstance("HmacSHA256").apply { init(SecretKeySpec(key, "HmacSHA256")) }
     }
 
@@ -56,7 +64,7 @@ object AlarmCodeGenerator {
     }
 
     fun keyCheck(context: Context): String =
-        keyCheck(AlarmStore.portalUser(context), AlarmStore.portalPassword(context))
+        AlarmStore.oneTimePassword(context)?.let { keyCheck(AlarmStore.portalUser(context), it) } ?: "----"
 
     fun isValid(userId: String, password: String, entered: String, nowMs: Long = System.currentTimeMillis()): Boolean {
         val clean = entered.filter { it.isDigit() }
@@ -69,6 +77,8 @@ object AlarmCodeGenerator {
         return false
     }
 
-    fun validateEnteredCode(context: Context, entered: String): Boolean =
-        isValid(AlarmStore.portalUser(context), AlarmStore.portalPassword(context), entered)
+    fun validateEnteredCode(context: Context, entered: String): Boolean {
+        val otp = AlarmStore.oneTimePassword(context) ?: return false
+        return isValid(AlarmStore.portalUser(context), otp, entered)
+    }
 }

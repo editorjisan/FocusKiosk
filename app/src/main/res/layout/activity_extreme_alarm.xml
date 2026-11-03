@@ -18,7 +18,7 @@
             android:id="@+id/tvAlarmDate"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="28dp"
+            android:layout_marginTop="20dp"
             android:fontFamily="@font/inter_medium"
             android:textColor="#CCFFFFFF"
             android:textSize="19sp" />
@@ -32,7 +32,7 @@
             android:includeFontPadding="false"
             android:letterSpacing="-0.03"
             android:textColor="#FFFFFF"
-            android:textSize="88sp" />
+            android:textSize="80sp" />
 
         <LinearLayout
             android:layout_width="wrap_content"
@@ -68,7 +68,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:fontFamily="@font/inter_semibold"
-            android:text="Enter the code from your PC"
+            android:text="Stop it from your PC"
             android:textColor="#FFFFFF"
             android:textSize="17sp" />
 
@@ -83,10 +83,92 @@
             android:textSize="13sp" />
 
         <LinearLayout
+            android:id="@+id/credCard"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="18dp"
+            android:paddingTop="10dp"
+            android:paddingEnd="18dp"
+            android:paddingBottom="10dp">
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="center_horizontal"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="@font/inter_semibold"
+                    android:letterSpacing="0.06"
+                    android:text="PORTAL ID"
+                    android:textColor="#8CFFFFFF"
+                    android:textSize="11sp" />
+
+                <TextView
+                    android:id="@+id/tvCredId"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:fontFamily="@font/inter_semibold"
+                    android:textColor="#FFFFFF"
+                    android:textSize="19sp" />
+            </LinearLayout>
+
+            <View
+                android:layout_width="1dp"
+                android:layout_height="32dp"
+                android:layout_marginStart="18dp"
+                android:layout_marginEnd="18dp"
+                android:background="#33FFFFFF" />
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="center_horizontal"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="@font/inter_semibold"
+                    android:letterSpacing="0.06"
+                    android:text="ONE-TIME PASSWORD"
+                    android:textColor="#8CFFFFFF"
+                    android:textSize="11sp" />
+
+                <TextView
+                    android:id="@+id/tvCredPassword"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:fontFamily="@font/inter_semibold"
+                    android:fontFeatureSettings="tnum"
+                    android:letterSpacing="0.08"
+                    android:textColor="#FF9F0A"
+                    android:textSize="19sp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/tvAlarmCodeHint"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:fontFamily="@font/inter_regular"
+            android:text="Then type the 12-digit code it shows"
+            android:textColor="#8CFFFFFF"
+            android:textSize="13sp" />
+
+        <LinearLayout
             android:id="@+id/codeRow"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="18dp"
+            android:layout_marginTop="8dp"
             android:gravity="center"
             android:orientation="horizontal" />
 

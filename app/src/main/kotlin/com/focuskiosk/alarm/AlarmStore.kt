@@ -3,6 +3,7 @@ package com.focuskiosk.alarm
 import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
+import java.security.SecureRandom
 import com.focuskiosk.storage.SecureStorage
 
 /**
@@ -19,7 +20,8 @@ object AlarmStore {
 
     private const val KEY_ALARMS = "alarms_json"
     private const val KEY_PORTAL_USER = "portal_user"
-    private const val KEY_PORTAL_PASS = "portal_pass"
+    private const val KEY_PORTAL_PASS = "portal_pass" // pre-1.5.1 fixed password, removed on first use
+    private const val KEY_ONE_TIME_PASSWORD = "one_time_password"
     private const val KEY_RINGING = "ringing"
     private const val KEY_RINGING_ALARM_ID = "ringing_alarm_id"
     private const val KEY_RINGING_SINCE = "ringing_since"
@@ -30,7 +32,6 @@ object AlarmStore {
     private const val KEY_GUARD_ENGAGED = "guard_engaged"
 
     const val DEFAULT_PORTAL_USER = "jisan"
-    const val DEFAULT_PORTAL_PASS = "1234"
     const val PORTAL_URL = "https://editorjisan.github.io/FocusKiosk/"
     const val PORTAL_URL_DISPLAY = "editorjisan.github.io/FocusKiosk"
 
@@ -53,15 +54,32 @@ object AlarmStore {
     fun portalUser(context: Context): String =
         prefs(context).getString(KEY_PORTAL_USER, null)?.takeIf { it.isNotBlank() } ?: DEFAULT_PORTAL_USER
 
-    fun portalPassword(context: Context): String =
-        prefs(context).getString(KEY_PORTAL_PASS, null)?.takeIf { it.isNotBlank() } ?: DEFAULT_PORTAL_PASS
-
-    fun setPortalCredentials(context: Context, user: String, password: String) {
-        prefs(context).edit()
-            .putString(KEY_PORTAL_USER, user.trim())
-            .putString(KEY_PORTAL_PASS, password.trim())
-            .commit()
+    fun setPortalUser(context: Context, user: String) {
+        prefs(context).edit().putString(KEY_PORTAL_USER, user.trim()).remove(KEY_PORTAL_PASS).commit()
     }
+
+    // ── One-time portal password: a fresh one for every alarm, gone once it is dismissed ──
+
+    private const val OTP_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ" // no 0/O, 1/I/L
+    private const val OTP_LENGTH = 8
+
+    fun oneTimePassword(context: Context): String? =
+        prefs(context).getString(KEY_ONE_TIME_PASSWORD, null)?.takeIf { it.length == OTP_LENGTH }
+
+    /** Returns the password for the alarm that is ringing, creating it when the alarm starts. */
+    fun ensureOneTimePassword(context: Context): String {
+        oneTimePassword(context)?.let { return it }
+        val random = SecureRandom()
+        val otp = (1..OTP_LENGTH).map { OTP_ALPHABET[random.nextInt(OTP_ALPHABET.length)] }.joinToString("")
+        prefs(context).edit().putString(KEY_ONE_TIME_PASSWORD, otp).remove(KEY_PORTAL_PASS).commit()
+        return otp
+    }
+
+    fun clearOneTimePassword(context: Context) {
+        prefs(context).edit().remove(KEY_ONE_TIME_PASSWORD).commit()
+    }
+
+    fun formatPassword(otp: String): String = otp.chunked(4).joinToString("-")
 
     // ── Ringing state (commit() so it survives an immediate forced reboot) ───────
 
@@ -109,7 +127,7 @@ object AlarmStore {
     }
 
     /**
-     * One-time copy of alarms and credentials from the pre-1.5 encrypted store.
+     * One-time copy of alarms and the portal ID from the pre-1.5 encrypted store.
      * Must run only after the user has unlocked (SecureStorage is credential-encrypted).
      */
     fun migrateFromSecureStorage(context: Context) {
@@ -122,13 +140,11 @@ object AlarmStore {
                 it.copy(isEnabled = it.isEnabled && masterEnabled)
             }
             val user = SecureStorage.getString(context, SecureStorage.KEY_ALARM_USER_ID, "")
-            val pass = SecureStorage.getString(context, SecureStorage.KEY_ALARM_PASSWORD, "")
             val edit = p.edit()
             if (legacy.isNotEmpty() && (p.getString(KEY_ALARMS, "") ?: "").isBlank()) {
                 edit.putString(KEY_ALARMS, AlarmItem.listToJsonString(legacy))
             }
             if (user.isNotBlank()) edit.putString(KEY_PORTAL_USER, user)
-            if (pass.isNotBlank()) edit.putString(KEY_PORTAL_PASS, pass)
             edit.putBoolean(KEY_MIGRATED, true).commit()
             Log.i(TAG, "Migrated ${legacy.size} legacy alarms (master enabled=$masterEnabled).")
         }.onFailure { Log.w(TAG, "Legacy alarm migration failed: ${it.message}") }

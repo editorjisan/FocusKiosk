@@ -87,7 +87,15 @@ class ExtremeAlarmActivity : AppCompatActivity() {
             alarm != null -> alarm.label
             else -> "Alarm"
         }
-        b.tvAlarmPortal.text = "${AlarmStore.PORTAL_URL_DISPLAY}  ·  ID ${AlarmStore.portalUser(this)}"
+        // A new password for every alarm; it is thrown away once the alarm is stopped.
+        val otp = AlarmStore.ensureOneTimePassword(this)
+        b.tvAlarmPortal.text = "Open ${AlarmStore.PORTAL_URL_DISPLAY} and sign in with"
+        b.tvCredId.text = AlarmStore.portalUser(this)
+        b.tvCredPassword.text = AlarmStore.formatPassword(otp)
+        b.credCard.background = GradientDrawable().apply {
+            cornerRadius = Ios.dpf(this@ExtremeAlarmActivity, 14f)
+            setColor(0x1FFFFFFF)
+        }
         b.tvAlarmKeyCheck.text = "Key check ${AlarmCodeGenerator.keyCheck(this)}"
 
         buildCodeCells()
@@ -223,7 +231,7 @@ class ExtremeAlarmActivity : AppCompatActivity() {
     private fun buildKeypad() {
         val metrics = resources.displayMetrics
         val screenH = metrics.heightPixels / metrics.density
-        val keyDp = ((screenH - 430f) / 4.7f).coerceIn(58f, 80f)
+        val keyDp = ((screenH - 500f) / 4.7f).coerceIn(56f, 78f)
         val gapDp = (keyDp * 0.28f).coerceIn(12f, 24f)
         val letters = mapOf(
             "2" to "A B C", "3" to "D E F", "4" to "G H I", "5" to "J K L",
@@ -322,7 +330,7 @@ class ExtremeAlarmActivity : AppCompatActivity() {
             showSuccess()
         } else {
             b.root.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-            b.tvAlarmError.text = "Wrong code. Use the newest code on your PC."
+            b.tvAlarmError.text = "Wrong code. Check the ID and password on your PC."
             ObjectAnimator.ofFloat(b.codeRow, View.TRANSLATION_X, 0f, 22f, -20f, 16f, -12f, 7f, -3f, 0f).apply {
                 duration = 460
                 start()

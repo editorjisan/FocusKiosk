@@ -76,17 +76,19 @@
     .group { background: var(--cell); border-radius: 10px; overflow: hidden; box-shadow: var(--shadow); }
     .row { display: flex; align-items: center; min-height: 46px; padding: 0 16px; position: relative; }
     .row + .row::before { content: ""; position: absolute; top: 0; left: 16px; right: 0; height: 0.5px; background: var(--separator); }
-    .row label { width: 104px; flex: none; }
-    .row input {
+    .row > label:not(.switch) { width: 104px; flex: none; }
+    .row input:not([type="checkbox"]) {
       flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--label);
       font: inherit; padding: 12px 0;
     }
     .row input::placeholder { color: var(--tertiary); }
+    #password { text-transform: uppercase; letter-spacing: 0.08em; font-variant-numeric: tabular-nums; }
+    #password::placeholder { text-transform: none; letter-spacing: normal; }
     .row .grow { flex: 1; }
     .row .value { color: var(--secondary); font-variant-numeric: tabular-nums; }
 
     .switch { position: relative; width: 51px; height: 31px; flex: none; }
-    .switch input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; z-index: 1; }
+    .switch input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; margin: 0; padding: 0; cursor: pointer; z-index: 1; }
     .switch span { position: absolute; inset: 0; background: var(--switch-off); border-radius: 31px; transition: background .25s; }
     .switch span::after {
       content: ""; position: absolute; top: 2px; left: 2px; width: 27px; height: 27px; border-radius: 50%;
@@ -145,7 +147,7 @@
     <!-- Sign in -->
     <section id="loginView">
       <h1>Alarm Portal</h1>
-      <p class="lede">Sign in with the Portal ID and password from Focus Kiosk to get the code that stops your alarm.</p>
+      <p class="lede">Sign in with your Portal ID and the one-time password shown on your phone's alarm screen.</p>
 
       <form id="loginForm" autocomplete="on">
         <div class="section-header">Sign In</div>
@@ -156,16 +158,16 @@
           </div>
           <div class="row">
             <label for="password">Password</label>
-            <input id="password" name="password" type="password" placeholder="Required" autocomplete="current-password" required>
+            <input id="password" name="one-time-code" type="text" placeholder="On your phone's alarm" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" maxlength="12" required>
           </div>
         </div>
         <div class="group" style="margin-top: 22px;">
           <div class="row">
-            <span class="grow">Remember on This PC</span>
-            <label class="switch" aria-label="Remember on this PC"><input id="remember" type="checkbox"><span></span></label>
+            <span class="grow">Remember ID on This PC</span>
+            <label class="switch" aria-label="Remember ID on this PC"><input id="remember" type="checkbox" checked><span></span></label>
           </div>
         </div>
-        <p class="section-footer">Turn this on only on your own computer.</p>
+        <p class="section-footer">Only the ID is remembered. The password is never saved and changes with every alarm.</p>
         <button class="btn" type="submit">Sign In</button>
         <p class="error" id="loginError"></p>
       </form>
@@ -194,15 +196,16 @@
       <div class="section-header">Details</div>
       <div class="group">
         <div class="row"><span class="grow">Code works for</span><span class="value">About 10 minutes</span></div>
+        <div class="row"><span class="grow">Password works for</span><span class="value">This alarm only</span></div>
         <div class="row"><span class="grow">Key check</span><span class="value" id="keyCheck">····</span></div>
       </div>
-      <p class="section-footer">The key check must match the one under PC Portal in Focus Kiosk. If it doesn't, the ID or password is different on your phone.</p>
+      <p class="section-footer">The key check must match the one at the bottom of your phone's alarm screen. If it doesn't, sign out and retype the ID and password.</p>
 
       <div class="section-header">How It Works</div>
       <div class="group">
         <ol class="steps">
           <li>Your phone alarm rings at full volume. Volume keys, the power menu and restarting can't stop it.</li>
-          <li>Get up, open this page on your PC and sign in.</li>
+          <li>Get up, open this page on your PC and sign in with your ID and the one-time password on the alarm screen.</li>
           <li>Type the 12-digit code on your phone's keypad. The alarm stops.</li>
         </ol>
       </div>
@@ -224,7 +227,9 @@
     const $ = (id) => document.getElementById(id);
     const now = () => Date.now() + clockOffsetMs;
     const normUser = (u) => u.trim().toLowerCase();
-    const keyOf = (p) => (p.trim().length ? p.trim() : "focuskiosk");
+    // Case, spaces and dashes don't matter: "k7q2-m9xd" == "K7Q2M9XD".
+    const normPass = (p) => p.toUpperCase().replace(/[^A-Z0-9]/g, "");
+    const keyOf = (p) => normPass(p) || "focuskiosk";
 
     async function hmac(keyStr, msg) {
       const key = await crypto.subtle.importKey("raw", enc.encode(keyStr), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
@@ -299,17 +304,13 @@
       e.preventDefault();
       const u = $("userId").value, p = $("password").value;
       if (!u.trim() || !p.trim()) { $("loginError").textContent = "Enter your Portal ID and password."; return; }
+      if (normPass(p).length !== 8) { $("loginError").textContent = "The one-time password has 8 letters and numbers, like K7Q2-M9XD."; return; }
       if (!window.crypto || !crypto.subtle) { $("loginError").textContent = "Open this page over https to use it."; return; }
       user = u; pass = p;
       try {
-        localStorage.setItem("fk_portal_user", u.trim());
-        if ($("remember").checked) {
-          localStorage.setItem("fk_portal_pass", p);
-          localStorage.setItem("fk_portal_remember", "1");
-        } else {
-          localStorage.removeItem("fk_portal_pass");
-          localStorage.removeItem("fk_portal_remember");
-        }
+        if ($("remember").checked) localStorage.setItem("fk_portal_user", u.trim());
+        else localStorage.removeItem("fk_portal_user");
+        localStorage.setItem("fk_portal_remember_id", $("remember").checked ? "1" : "0");
       } catch (_) {}
       $("loginError").textContent = "";
       await showCode();
@@ -318,30 +319,24 @@
     $("signOut").addEventListener("click", () => {
       clearInterval(timer);
       clearInterval(syncTimer);
-      try { localStorage.removeItem("fk_portal_pass"); localStorage.removeItem("fk_portal_remember"); } catch (_) {}
       pass = "";
       $("password").value = "";
       $("codeView").classList.add("hidden");
       $("loginView").classList.remove("hidden");
     });
 
-    window.addEventListener("DOMContentLoaded", async () => {
-      let savedUser = "", savedPass = "", remember = false;
+    window.addEventListener("DOMContentLoaded", () => {
+      let savedUser = "", rememberId = true;
       try {
+        // Passwords saved by older versions of this page are wiped.
+        localStorage.removeItem("fk_portal_pass");
+        localStorage.removeItem("fk_portal_remember");
         savedUser = localStorage.getItem("fk_portal_user") || "";
-        savedPass = localStorage.getItem("fk_portal_pass") || "";
-        remember = localStorage.getItem("fk_portal_remember") === "1";
+        rememberId = localStorage.getItem("fk_portal_remember_id") !== "0";
       } catch (_) {}
       $("userId").value = savedUser;
-      $("remember").checked = remember;
-      if (remember && savedUser && savedPass) {
-        user = savedUser; pass = savedPass;
-        await showCode();
-      } else if (savedUser) {
-        $("password").focus();
-      } else {
-        $("userId").focus();
-      }
+      $("remember").checked = rememberId;
+      (savedUser ? $("password") : $("userId")).focus();
     });
   </script>
 </body>

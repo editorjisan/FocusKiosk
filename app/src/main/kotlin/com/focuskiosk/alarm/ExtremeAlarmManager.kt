@@ -126,6 +126,7 @@ object ExtremeAlarmManager {
     fun startRinging(context: Context, alarmId: String?) {
         val appContext = context.applicationContext
         AlarmStore.setRinging(appContext, true, alarmId ?: AlarmStore.ringingAlarmId(appContext))
+        AlarmStore.ensureOneTimePassword(appContext)
         ExtremeAlarmService.start(appContext)
         ExtremeAlarmService.launchAlarmScreen(appContext)
     }
@@ -134,6 +135,7 @@ object ExtremeAlarmManager {
         val appContext = context.applicationContext
         Log.i(TAG, "Alarm dismissed with PC code.")
         AlarmStore.setRinging(appContext, false)
+        AlarmStore.clearOneTimePassword(appContext)
         cancelResume(appContext)
         ExtremeAlarmService.stop(appContext)
         scheduleNext(appContext)

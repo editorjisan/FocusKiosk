@@ -9,7 +9,6 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import com.focuskiosk.R
-import com.focuskiosk.alarm.AlarmCodeGenerator
 import com.focuskiosk.alarm.AlarmItem
 import com.focuskiosk.alarm.AlarmStore
 import com.focuskiosk.alarm.ExtremeAlarmManager
@@ -296,27 +295,18 @@ object FocusSheets {
         sheet.show()
     }
 
-    fun portalCredentials(context: Context, onSaved: () -> Unit) {
+    fun portalId(context: Context, onSaved: () -> Unit) {
         val alert = IosAlert(context)
-            .title("PC Portal Login")
-            .message("Sign in on ${AlarmStore.PORTAL_URL_DISPLAY} with this ID and password to see the code that stops your alarm.")
+            .title("Portal ID")
+            .message("Type this ID on ${AlarmStore.PORTAL_URL_DISPLAY}. The password is new for every alarm and appears on the alarm screen.")
         val idField = alert.field("Portal ID", AlarmStore.portalUser(context))
-        val passField = alert.field("Password", AlarmStore.portalPassword(context), password = true)
         alert.action("Cancel", IosAlert.Style.CANCEL)
             .action("Save", IosAlert.Style.PREFERRED) {
-                val id = idField.value
-                val pass = passField.value
-                if (id.isNotEmpty() && pass.isNotEmpty()) {
-                    AlarmStore.setPortalCredentials(context, id, pass)
+                if (idField.value.isNotEmpty()) {
+                    AlarmStore.setPortalUser(context, idField.value)
                     onSaved()
-                } else {
-                    IosAlert(context).title("Missing Details")
-                        .message("Both the Portal ID and password are needed.")
-                        .action("OK", IosAlert.Style.PREFERRED).show()
                 }
             }
             .show()
     }
-
-    fun keyCheckText(context: Context): String = AlarmCodeGenerator.keyCheck(context)
 }
