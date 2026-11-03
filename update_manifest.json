@@ -1,8 +1,8 @@
 {
-  "versionCode": 32,
-  "versionName": "1.4.5",
-  "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.4.5/FocusKiosk.apk",
+  "versionCode": 33,
+  "versionName": "1.5.0",
+  "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.5.0/FocusKiosk.apk",
   "sha256": "",
-  "releaseNotes": "v1.4.5: Unconditional immediate unlock and full reset of 30-day timer, unsuspending and unhiding all applications on launch.",
+  "releaseNotes": "v1.5.0: iOS-style redesign, upload window that fully unlocks then re-locks, alarms that stop only with the 12-digit PC portal code, and locks that no longer reset on launch or update.",
   "minSdkVersion": 28
 }
