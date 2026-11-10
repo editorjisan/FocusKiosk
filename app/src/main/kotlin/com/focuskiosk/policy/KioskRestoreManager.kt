@@ -61,27 +61,61 @@ object KioskRestoreManager {
      * Guaranteed to restore all hidden/suspended apps, reset restrictions, and restore system launcher.
      */
     @Synchronized
-    fun restoreAllApps(context: Context) {
+    fun restoreAllApps(context: Context, launchMain: Boolean = true) {
         val appContext = context.applicationContext
-        if (!isDeviceOwner(appContext)) {
-            Log.e(TAG, "Cannot restore apps: FocusKiosk is not Device Owner.")
-            return
-        }
+        val deviceOwner = isDeviceOwner(appContext)
 
         Log.i(TAG, "=======================================================")
-        Log.i(TAG, "STARTING COMPLETE KIOSK RESTORATION & APP UNHIDING")
+        Log.i(TAG, "STARTING COMPLETE KIOSK RESTORATION & APP UNHIDING (deviceOwner=$deviceOwner)")
         Log.i(TAG, "=======================================================")
 
-        val pm = appContext.packageManager
-        val devicePolicyManager = dpm(appContext)
-        val adminComponent = admin(appContext)
-
-        // 0. Stop the foreground countdown service and cancel notification immediately
+        // 0. Always clear persisted lock/timer state FIRST (synchronously) and stop countdown service,
+        // even if Device Owner is not active or an activity is launched right after.
         FocusCountdownService.stop(appContext)
         runCatching {
             val nm = appContext.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
             nm.cancel(FocusCountdownService.NOTIFICATION_ID)
         }
+        SecureStorage.putBoolean(appContext, SecureStorage.KEY_LOCK_ACTIVE, false)
+        SecureStorage.putLong(appContext, SecureStorage.KEY_UNLOCK_TIMESTAMP_MS, 0L)
+        SecureStorage.putLong(appContext, SecureStorage.KEY_LOCK_START_MS, 0L)
+        SecureStorage.setSetupCompleted(appContext, false)
+        SecureStorage.setBlockedPackages(appContext, emptySet())
+
+        appContext.getSharedPreferences("focus_kiosk_prefs", Context.MODE_PRIVATE).edit()
+            .putLong("unlock_epoch_time", 0L)
+            .putBoolean("lock_active", false)
+            .commit()
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            runCatching {
+                appContext.createDeviceProtectedStorageContext()
+                    .getSharedPreferences("focus_kiosk_prefs", Context.MODE_PRIVATE).edit()
+                    .putLong("unlock_epoch_time", 0L)
+                    .putBoolean("lock_active", false)
+                    .commit()
+            }
+        }
+
+        WorkWindowScheduler.resetAllWindows(appContext)
+        cancelScheduledFailSafe(appContext)
+
+        val pm = appContext.packageManager
+        val alarmRinging = com.focuskiosk.alarm.AlarmGuard.isRinging(appContext)
+
+        if (!deviceOwner) {
+            Log.w(TAG, "FocusKiosk is not Device Owner — cleared local lock state & timers only.")
+            if (launchMain && !alarmRinging) runCatching {
+                val mainIntent = Intent(appContext, com.focuskiosk.MainActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                }
+                appContext.startActivity(mainIntent)
+            }
+            return
+        }
+
+        val devicePolicyManager = dpm(appContext)
+        val adminComponent = admin(appContext)
 
         // 1. Clear any persistent preferred home/launcher activities
         runCatching {
@@ -177,16 +211,12 @@ object KioskRestoreManager {
         }
 
         // 6. Restore LockTask packages / features (left alone while an alarm screen is pinned)
-        val alarmRinging = com.focuskiosk.alarm.AlarmGuard.isRinging(appContext)
         if (!alarmRinging) runCatching {
             devicePolicyManager.setLockTaskFeatures(adminComponent, com.focuskiosk.alarm.AlarmGuard.STANDARD_LOCK_TASK_FEATURES)
             devicePolicyManager.setLockTaskPackages(adminComponent, emptyArray())
             devicePolicyManager.setStatusBarDisabled(adminComponent, false)
             devicePolicyManager.setKeyguardDisabled(adminComponent, false)
         }.onFailure { Log.w(TAG, "Error resetting LockTask features: ${it.message}") }
-
-        // 6b. Reset all upload window states & cancel alarms
-        WorkWindowScheduler.resetAllWindows(appContext)
 
         // 7. Clear web filtering and deep link restrictions
         runCatching {
@@ -209,38 +239,13 @@ object KioskRestoreManager {
             Log.i(TAG, "Re-enabled all launcher components.")
         }.onFailure { Log.w(TAG, "Failed re-enabling launcher components: ${it.message}") }
 
-        // Launch MainActivity so user sees unlocked state
-        if (!alarmRinging) runCatching {
+        // Launch MainActivity AFTER state is already cleared
+        if (launchMain && !alarmRinging) runCatching {
             val mainIntent = Intent(appContext, com.focuskiosk.MainActivity::class.java).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
             }
             appContext.startActivity(mainIntent)
         }
-
-        // 8. Update persistent secure state
-        SecureStorage.putBoolean(appContext, SecureStorage.KEY_LOCK_ACTIVE, false)
-        SecureStorage.putLong(appContext, SecureStorage.KEY_UNLOCK_TIMESTAMP_MS, 0L)
-        SecureStorage.putLong(appContext, SecureStorage.KEY_LOCK_START_MS, 0L)
-        SecureStorage.setSetupCompleted(appContext, false)
-        SecureStorage.setBlockedPackages(appContext, emptySet())
-
-        appContext.getSharedPreferences("focus_kiosk_prefs", Context.MODE_PRIVATE).edit()
-            .putLong("unlock_epoch_time", 0L)
-            .putBoolean("lock_active", false)
-            .apply()
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            runCatching {
-                appContext.createDeviceProtectedStorageContext()
-                    .getSharedPreferences("focus_kiosk_prefs", Context.MODE_PRIVATE).edit()
-                    .putLong("unlock_epoch_time", 0L)
-                    .putBoolean("lock_active", false)
-                    .apply()
-            }
-        }
-
-        // Cancel scheduled fail-safe workers and alarms
-        cancelScheduledFailSafe(appContext)
 
         Log.i(TAG, "=======================================================")
         Log.i(TAG, "KIOSK RESTORATION COMPLETED SUCCESSFULLY")

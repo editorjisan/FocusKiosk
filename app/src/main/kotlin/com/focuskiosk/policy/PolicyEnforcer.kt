@@ -38,6 +38,8 @@ object PolicyEnforcer {
 
     private const val TAG = "PolicyEnforcer"
 
+    const val OUTREACH_ENGINE_PACKAGE = "com.editorjisan.outreach_engine"
+
     // ── DPM accessors ─────────────────────────────────────────────────────────
 
     private fun dpm(context: Context): DevicePolicyManager =
@@ -369,6 +371,8 @@ object PolicyEnforcer {
         "com.dev47apps.droidcam",
         "com.dev47apps.droidcamx",
         "com.pas.webcam",
+        // Companion 24/7 Cold-Email Engine (must ALWAYS stay unsuspended, visible & able to post notifications)
+        OUTREACH_ENGINE_PACKAGE,
         // Input methods / keyboards
         "com.google.android.inputmethod.latin",
         "com.android.inputmethod.latin",
@@ -512,9 +516,28 @@ object PolicyEnforcer {
         // 9. Silently grant media permissions for real-time adult media purge
         grantMediaPermissionsSilently(context)
 
+        // 9b. Guarantee companion packages (EJ Outreach) are never left suspended, hidden or notification-blocked
+        ensureCompanionPackagesAlwaysAllowed(context)
+
         // 10. Mark lock as active.
         SecureStorage.putBoolean(context, SecureStorage.KEY_LOCK_ACTIVE, true)
         Log.i(TAG, "Focus lock fully activated. ${toBlock.size} apps targeted.")
+    }
+
+    /**
+     * Ensures companion apps in [SYSTEM_PACKAGE_DENYLIST] like EJ Outreach are never left suspended,
+     * hidden, or stripped of notification permissions by a previous lock state.
+     */
+    fun ensureCompanionPackagesAlwaysAllowed(context: Context) {
+        if (!requireDeviceOwner(context)) return
+        val companion = listOf(OUTREACH_ENGINE_PACKAGE)
+        val blocked = SecureStorage.getBlockedPackages(context)
+        if (OUTREACH_ENGINE_PACKAGE in blocked) {
+            SecureStorage.setBlockedPackages(context, blocked - OUTREACH_ENGINE_PACKAGE)
+        }
+        unsuspendPackages(context, companion.toTypedArray())
+        companion.forEach { unhideApplication(context, it) }
+        restoreNotifications(context, companion)
     }
 
     // ── Web & Deep Link Filtering ─────────────────────────────────────────────
@@ -743,6 +766,7 @@ object PolicyEnforcer {
         } else {
             Log.i(TAG, "Re-enforcing focus lock after boot.")
             activateFocusLock(context)
+            ensureCompanionPackagesAlwaysAllowed(context)
             val unlockTs = SecureStorage.getUnlockTimestampMs(context)
             com.focuskiosk.service.FocusCountdownService.start(context, unlockTs)
             KioskRestoreManager.scheduleFailSafe(context, unlockTs)

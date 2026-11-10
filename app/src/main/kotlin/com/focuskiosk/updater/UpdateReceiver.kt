@@ -50,9 +50,9 @@ class UpdateReceiver : BroadcastReceiver() {
             cleanupCacheApks(context)
 
             // Clean-slate reset: unlock all apps, unsuspend/unhide all packages, clear all lock & window states
-            Log.i(TAG, "v1.5.2 Clean-slate upgrade reset: Restoring all apps and resetting all windows/locks.")
-            com.focuskiosk.storage.SecureStorage.putBoolean(context, "reset_v152_clean_slate", true)
-            com.focuskiosk.policy.KioskRestoreManager.restoreAllApps(context)
+            Log.i(TAG, "v1.5.3 Clean-slate upgrade reset: Restoring all apps and resetting all windows/locks.")
+            com.focuskiosk.storage.SecureStorage.putBoolean(context, "reset_v153_clean_slate", true)
+            com.focuskiosk.policy.KioskRestoreManager.restoreAllApps(context, launchMain = false)
             com.focuskiosk.policy.WorkWindowScheduler.resetAllWindows(context)
 
             // Relaunch the app UI in fresh Setup Mode

@@ -213,10 +213,10 @@ open class SetupWizardActivity : AppCompatActivity() {
     }
 
     private fun render() {
-        // One-time clean-slate reset for v1.5.2 to ensure user can set up fresh
-        if (!SecureStorage.getBoolean(this, "reset_v152_clean_slate", false)) {
-            SecureStorage.putBoolean(this, "reset_v152_clean_slate", true)
-            KioskRestoreManager.restoreAllApps(this)
+        // One-time clean-slate reset for v1.5.3 to clear any stuck timer & protect EJ Outreach
+        if (!SecureStorage.getBoolean(this, "reset_v153_clean_slate", false)) {
+            SecureStorage.putBoolean(this, "reset_v153_clean_slate", true)
+            KioskRestoreManager.restoreAllApps(this, launchMain = false)
             WorkWindowScheduler.resetAllWindows(this)
             renderSetup()
             return
@@ -665,10 +665,11 @@ open class SetupWizardActivity : AppCompatActivity() {
                 .message("This will unlock all apps immediately and reset the current focus lock and upload schedules.")
                 .action("Cancel", IosAlert.Style.CANCEL)
                 .action("Reset", IosAlert.Style.DESTRUCTIVE) {
-                    KioskRestoreManager.restoreAllApps(this@SetupWizardActivity)
+                    lockedUntil = 0L
+                    KioskRestoreManager.restoreAllApps(this@SetupWizardActivity, launchMain = false)
                     WorkWindowScheduler.resetAllWindows(this@SetupWizardActivity)
                     IosHud.show(this@SetupWizardActivity, "Reset", R.drawable.ic_sym_reset)
-                    render()
+                    renderSetup()
                 }
                 .show()
         }

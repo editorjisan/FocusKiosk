@@ -72,6 +72,9 @@ class FocusVpnService : VpnService() {
             .addRoute("0.0.0.0", 0)     // Capture all IPv4 traffic.
             .addDisallowedApplication(packageName) // Kiosk app bypasses VPN (for updates).
 
+        // Companion 24/7 Cold-Email Engine bypasses local VPN TUN so SMTP/IMAP/Supabase stay direct.
+        runCatching { builder.addDisallowedApplication(com.focuskiosk.policy.PolicyEnforcer.OUTREACH_ENGINE_PACKAGE) }
+
         // Financial app VPN bypass (split tunnelling):
         // These apps send traffic directly to the NIC — TUN never sees it.
         financialPkgs.forEach { pkg ->

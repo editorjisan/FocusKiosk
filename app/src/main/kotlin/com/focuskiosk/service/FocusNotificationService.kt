@@ -5,6 +5,7 @@ import android.content.Context
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
+import com.focuskiosk.policy.PolicyEnforcer
 import com.focuskiosk.storage.SecureStorage
 
 /**
@@ -52,6 +53,7 @@ class FocusNotificationService : NotificationListenerService() {
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         if (sbn == null) return
         val pkg = sbn.packageName ?: return
+        if (pkg == PolicyEnforcer.OUTREACH_ENGINE_PACKAGE) return
 
         // If Focus Mode is active, check if this package is blocked
         if (SecureStorage.getBoolean(applicationContext, SecureStorage.KEY_LOCK_ACTIVE, false)) {
@@ -76,6 +78,7 @@ class FocusNotificationService : NotificationListenerService() {
             var purged = 0
             for (sbn in active) {
                 val pkg = sbn.packageName ?: continue
+                if (pkg == PolicyEnforcer.OUTREACH_ENGINE_PACKAGE) continue
                 if (pkg in blocked) {
                     cancelNotification(sbn.key)
                     purged++
