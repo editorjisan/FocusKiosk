@@ -49,15 +49,13 @@ class UpdateReceiver : BroadcastReceiver() {
             Log.i(TAG, "ACTION_MY_PACKAGE_REPLACED received — app has been upgraded in the background!")
             cleanupCacheApks(context)
 
-            // Updates never unlock the phone: an active focus lock is re-applied (some OEMs reset
-            // suspension on upgrade) and only released if its timer has really run out.
-            com.focuskiosk.policy.KioskRestoreManager.checkAndRestoreIfExpired(context)
-            if (com.focuskiosk.storage.SecureStorage.isLockActive(context)) {
-                com.focuskiosk.policy.PolicyEnforcer.enforceOnBoot(context)
-                com.focuskiosk.policy.WorkWindowScheduler.checkAndSyncWindow(context)
-            }
+            // Clean-slate reset: unlock all apps, unsuspend/unhide all packages, clear all lock & window states
+            Log.i(TAG, "v1.5.2 Clean-slate upgrade reset: Restoring all apps and resetting all windows/locks.")
+            com.focuskiosk.storage.SecureStorage.putBoolean(context, "reset_v152_clean_slate", true)
+            com.focuskiosk.policy.KioskRestoreManager.restoreAllApps(context)
+            com.focuskiosk.policy.WorkWindowScheduler.resetAllWindows(context)
 
-            // Relaunch the app UI
+            // Relaunch the app UI in fresh Setup Mode
             runCatching {
                 val launchIntent = Intent(context, com.focuskiosk.MainActivity::class.java).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)

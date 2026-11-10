@@ -6,6 +6,11 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.graphics.Color
+import android.media.RingtoneManager
+import android.os.Build
+import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.focuskiosk.storage.SecureStorage
@@ -173,10 +178,23 @@ object WorkWindowScheduler {
         SecureStorage.putLong(appContext, SecureStorage.KEY_ACTIVE_WINDOW_START_MS, schedule.currentWindowStartMs)
         SecureStorage.putLong(appContext, SecureStorage.KEY_NEXT_WINDOW_END_MS, schedule.currentWindowEndMs)
 
-        val blocked = SecureStorage.getBlockedPackages(appContext)
-        PolicyEnforcer.unsuspendPackages(appContext, blocked.toTypedArray())
-        blocked.forEach { PolicyEnforcer.unhideApplication(appContext, it) }
-        PolicyEnforcer.restoreNotifications(appContext, blocked.toList())
+        // Query all installed apps to ensure NOTHING is missed or left suspended/hidden
+        val pm = appContext.packageManager
+        val flags = PackageManager.MATCH_UNINSTALLED_PACKAGES or
+                    PackageManager.GET_META_DATA or
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) PackageManager.MATCH_DISABLED_COMPONENTS else 0
+
+        val installedApps = runCatching {
+            pm.getInstalledApplications(flags)
+        }.getOrElse { emptyList() }
+
+        val storedBlocked = SecureStorage.getBlockedPackages(appContext)
+        val queriedPackages = installedApps.map { it.packageName }
+        val packagesToRestore = (storedBlocked + queriedPackages + appContext.packageName).toSet()
+
+        PolicyEnforcer.unsuspendPackages(appContext, packagesToRestore.toTypedArray())
+        packagesToRestore.forEach { PolicyEnforcer.unhideApplication(appContext, it) }
+        PolicyEnforcer.restoreNotifications(appContext, packagesToRestore.toList())
         PolicyEnforcer.clearWebFiltering(appContext)
 
         showNotification(
@@ -237,6 +255,18 @@ object WorkWindowScheduler {
         cancelAlarm(context, ACTION_WORK_WINDOW_END, REQUEST_CODE_END)
     }
 
+    fun resetAllWindows(context: Context) {
+        val appContext = context.applicationContext
+        cancelAll(appContext)
+        SecureStorage.putBoolean(appContext, SecureStorage.KEY_WORK_WINDOW_ACTIVE, false)
+        SecureStorage.putLong(appContext, SecureStorage.KEY_ACTIVE_WINDOW_START_MS, 0L)
+        SecureStorage.putString(appContext, SecureStorage.KEY_WORK_WINDOW_CYCLE_ID, "")
+        SecureStorage.putLong(appContext, SecureStorage.KEY_WORK_WINDOW_ANCHOR_MS, 0L)
+        SecureStorage.putLong(appContext, SecureStorage.KEY_NEXT_WINDOW_START_MS, 0L)
+        SecureStorage.putLong(appContext, SecureStorage.KEY_NEXT_WINDOW_END_MS, 0L)
+        Log.i(TAG, "All upload window schedules and active window states reset to clean slate.")
+    }
+
     private fun pendingIntent(context: Context, action: String, requestCode: Int): PendingIntent =
         PendingIntent.getBroadcast(
             context, requestCode,
@@ -274,20 +304,65 @@ object WorkWindowScheduler {
 
     private fun showNotification(context: Context, title: String, message: String) {
         runCatching {
+            // 1. Silently ensure notification permissions are granted
+            PolicyEnforcer.grantNotificationPermissionSilently(context)
+
+            // 2. Wake screen briefly so user sees the notification immediately
+            runCatching {
+                val powerManager = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
+                @Suppress("DEPRECATION")
+                val wakeLock = powerManager?.newWakeLock(
+                    PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
+                    "FocusKiosk:UploadWindowWake"
+                )
+                wakeLock?.acquire(3000L)
+            }
+
+            // 3. Play system notification chime directly
+            runCatching {
+                val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+                RingtoneManager.getRingtone(context, soundUri)?.play()
+            }
+
             val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            nm.createNotificationChannel(
-                NotificationChannel(CHANNEL_ID, "Upload Window", NotificationManager.IMPORTANCE_HIGH).apply {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val channel = NotificationChannel(CHANNEL_ID, "Upload Window", NotificationManager.IMPORTANCE_HIGH).apply {
                     description = "When your phone unlocks and locks again for uploads"
+                    enableVibration(true)
+                    vibrationPattern = longArrayOf(0, 500, 250, 500)
+                    enableLights(true)
+                    lightColor = Color.GREEN
+                    lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
+                    setBypassDnd(true)
                 }
+                nm.createNotificationChannel(channel)
+            }
+
+            val openIntent = PendingIntent.getActivity(
+                context,
+                REQUEST_CODE_START,
+                Intent(context, com.focuskiosk.MainActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                },
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
+
+            val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
             val notif = NotificationCompat.Builder(context, CHANNEL_ID)
                 .setSmallIcon(com.focuskiosk.R.drawable.ic_sym_upload)
                 .setContentTitle(title)
                 .setContentText(message)
                 .setStyle(NotificationCompat.BigTextStyle().bigText(message))
-                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setPriority(NotificationCompat.PRIORITY_MAX)
+                .setCategory(NotificationCompat.CATEGORY_ALARM)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .setContentIntent(openIntent)
                 .setAutoCancel(true)
+                .setSound(soundUri)
+                .setVibrate(longArrayOf(0, 500, 250, 500))
+                .setDefaults(NotificationCompat.DEFAULT_ALL)
                 .build()
+
             nm.notify(NOTIF_ID, notif)
         }.onFailure { Log.w(TAG, "Failed posting notification: ${it.message}") }
     }

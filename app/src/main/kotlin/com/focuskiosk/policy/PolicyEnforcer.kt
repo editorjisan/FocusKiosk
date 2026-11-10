@@ -673,6 +673,21 @@ object PolicyEnforcer {
         Log.i(TAG, "Silently granted media and external storage permissions via DPM.")
     }
 
+    fun grantNotificationPermissionSilently(context: Context) {
+        if (!requireDeviceOwner(context)) return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            runCatching {
+                dpm(context).setPermissionGrantState(
+                    admin(context),
+                    context.packageName,
+                    "android.permission.POST_NOTIFICATIONS",
+                    DevicePolicyManager.PERMISSION_GRANT_STATE_GRANTED
+                )
+                Log.i(TAG, "Silently granted POST_NOTIFICATIONS to ${context.packageName}")
+            }.onFailure { Log.w(TAG, "Failed granting POST_NOTIFICATIONS: ${it.message}") }
+        }
+    }
+
     /**
      * Attempts to unrestrict Android 11-14+ security restrictions for full storage access
      * and Accessibility via AppOpsManager reflection:

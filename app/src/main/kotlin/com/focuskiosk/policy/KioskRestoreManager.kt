@@ -185,10 +185,8 @@ object KioskRestoreManager {
             devicePolicyManager.setKeyguardDisabled(adminComponent, false)
         }.onFailure { Log.w(TAG, "Error resetting LockTask features: ${it.message}") }
 
-        // 6b. The upload window only exists inside a focus lock
-        WorkWindowScheduler.cancelAll(appContext)
-        SecureStorage.putBoolean(appContext, SecureStorage.KEY_WORK_WINDOW_ACTIVE, false)
-        SecureStorage.putLong(appContext, SecureStorage.KEY_ACTIVE_WINDOW_START_MS, 0L)
+        // 6b. Reset all upload window states & cancel alarms
+        WorkWindowScheduler.resetAllWindows(appContext)
 
         // 7. Clear web filtering and deep link restrictions
         runCatching {
@@ -221,6 +219,8 @@ object KioskRestoreManager {
 
         // 8. Update persistent secure state
         SecureStorage.putBoolean(appContext, SecureStorage.KEY_LOCK_ACTIVE, false)
+        SecureStorage.putLong(appContext, SecureStorage.KEY_UNLOCK_TIMESTAMP_MS, 0L)
+        SecureStorage.putLong(appContext, SecureStorage.KEY_LOCK_START_MS, 0L)
         SecureStorage.setSetupCompleted(appContext, false)
         SecureStorage.setBlockedPackages(appContext, emptySet())
 

@@ -95,6 +95,7 @@ open class SetupWizardActivity : AppCompatActivity() {
     ) { isGranted -> Log.i("SetupWizard", "POST_NOTIFICATIONS granted=$isGranted") }
 
     private fun ensureNotificationPermission() {
+        PolicyEnforcer.grantNotificationPermissionSilently(this)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             requestNotificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
@@ -212,12 +213,25 @@ open class SetupWizardActivity : AppCompatActivity() {
     }
 
     private fun render() {
+        // One-time clean-slate reset for v1.5.2 to ensure user can set up fresh
+        if (!SecureStorage.getBoolean(this, "reset_v152_clean_slate", false)) {
+            SecureStorage.putBoolean(this, "reset_v152_clean_slate", true)
+            KioskRestoreManager.restoreAllApps(this)
+            WorkWindowScheduler.resetAllWindows(this)
+            renderSetup()
+            return
+        }
+
         val (isLocked, unlockAt) = readLockState()
         val now = System.currentTimeMillis()
+        val isWindowActive = WorkWindowScheduler.isWindowActive(this)
+
         if (isLocked && unlockAt in 1..now) {
             Log.i("SetupWizard", "Unlock time reached — restoring apps.")
             KioskRestoreManager.restoreAllApps(this)
             renderSetup()
+        } else if (isWindowActive) {
+            renderUploadWindowActive(unlockAt)
         } else if (isLocked && unlockAt > now) {
             renderLocked(unlockAt)
         } else {
@@ -248,6 +262,25 @@ open class SetupWizardActivity : AppCompatActivity() {
         addProtectionSection()
         addAlarmSection()
         addPortalSection()
+        addResetSection()
+    }
+
+    private fun renderUploadWindowActive(unlockAt: Long) {
+        lockedUntil = unlockAt
+        resetLiveViews()
+        b.tvHeaderSubtitle.text = "Upload Window Open. Your phone is fully unlocked for uploading."
+        b.bottomBar.visibility = View.GONE
+        updateBottomPadding()
+
+        addUploadWindowStatusSection()
+        addUploadWindowSetupSection()
+        addFocusSetupSection()
+        addProtectionSection()
+        addAlarmSection()
+        addPortalSection()
+        addResetSection()
+        addUpdateSection()
+        onTick()
     }
 
     private fun renderLocked(unlockAt: Long) {
@@ -261,6 +294,7 @@ open class SetupWizardActivity : AppCompatActivity() {
         addUploadWindowStatusSection()
         addAlarmSection()
         addPortalSection()
+        addResetSection()
         addUpdateSection()
         onTick()
     }
@@ -302,8 +336,10 @@ open class SetupWizardActivity : AppCompatActivity() {
     private fun addFocusSetupSection() {
         val section = form.section("Focus Lock")
         focusSection = section
-        val durationRow = section.row("Duration", icon = R.drawable.ic_sym_hourglass, iconColor = R.color.ios_indigo)
         lateinit var pill: TextView
+        val durationRow = section.row("Duration", icon = R.drawable.ic_sym_hourglass, iconColor = R.color.ios_indigo) {
+            pill.performClick()
+        }
         pill = IosPill.create(this, FocusFormat.duration(durationMins)) {
             FocusSheets.lockDuration(this, durationMins) { mins ->
                 durationMins = mins
@@ -367,8 +403,10 @@ open class SetupWizardActivity : AppCompatActivity() {
             footer()
         })
 
-        val startRow = section.row("Starts At", icon = R.drawable.ic_sym_clock, iconColor = R.color.ios_blue)
         lateinit var startPill: TextView
+        val startRow = section.row("Starts At", icon = R.drawable.ic_sym_clock, iconColor = R.color.ios_blue) {
+            startPill.performClick()
+        }
         startPill = IosPill.create(this, FocusFormat.time(cfg.hour, cfg.minute)) {
             val c = WorkWindowScheduler.config(this)
             FocusSheets.time(this, "Starts At", c.hour, c.minute) { h, m ->
@@ -379,8 +417,10 @@ open class SetupWizardActivity : AppCompatActivity() {
         }
         startRow.setAccessory(startPill)
 
-        val lengthRow = section.row("Unlock For", icon = R.drawable.ic_sym_lock, iconColor = R.color.ios_teal)
         lateinit var lengthPill: TextView
+        val lengthRow = section.row("Unlock For", icon = R.drawable.ic_sym_lock, iconColor = R.color.ios_teal) {
+            lengthPill.performClick()
+        }
         lengthPill = IosPill.create(this, FocusFormat.duration(cfg.durationMins)) {
             FocusSheets.windowLength(this, WorkWindowScheduler.config(this).durationMins) { mins ->
                 WorkWindowScheduler.saveConfig(this, WorkWindowScheduler.config(this).copy(durationMins = mins))
@@ -612,6 +652,26 @@ open class SetupWizardActivity : AppCompatActivity() {
             FocusSheets.portalId(this) { render() }
         }
         section.row("Password", icon = R.drawable.ic_sym_key, iconColor = R.color.ios_gray, value = "New every alarm")
+    }
+
+    private fun addResetSection() {
+        val section = form.section(
+            "Reset & Restore",
+            footer = "Reset active focus locks, upload schedules and restore all applications so you can configure setup fresh."
+        )
+        section.buttonRow("Reset All Windows & Locks", R.color.ios_red, center = true) {
+            IosAlert(this)
+                .title("Reset All Windows & Locks?")
+                .message("This will unlock all apps immediately and reset the current focus lock and upload schedules.")
+                .action("Cancel", IosAlert.Style.CANCEL)
+                .action("Reset", IosAlert.Style.DESTRUCTIVE) {
+                    KioskRestoreManager.restoreAllApps(this@SetupWizardActivity)
+                    WorkWindowScheduler.resetAllWindows(this@SetupWizardActivity)
+                    IosHud.show(this@SetupWizardActivity, "Reset", R.drawable.ic_sym_reset)
+                    render()
+                }
+                .show()
+        }
     }
 
     // ── Software update ───────────────────────────────────────────────────────

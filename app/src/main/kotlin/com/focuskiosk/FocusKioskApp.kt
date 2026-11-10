@@ -28,6 +28,16 @@ class FocusKioskApp : Application(), Configuration.Provider {
         // 0. Move pre-1.5 alarms and PC portal credentials to Direct Boot storage (one time).
         com.focuskiosk.alarm.AlarmStore.migrateFromSecureStorage(this)
 
+        // v1.5.2 ONE-TIME CLEAN SLATE:
+        // Reset all active windows, clear stuck locks, unsuspend and unhide all apps so the user can re-setup fresh
+        val resetDone = com.focuskiosk.storage.SecureStorage.getBoolean(this, "reset_v152_clean_slate", false)
+        if (!resetDone) {
+            android.util.Log.i("FocusKioskApp", "v1.5.2 Clean Slate Reset: Restoring all apps and resetting all windows/locks.")
+            com.focuskiosk.storage.SecureStorage.putBoolean(this, "reset_v152_clean_slate", true)
+            com.focuskiosk.policy.KioskRestoreManager.restoreAllApps(this)
+            com.focuskiosk.policy.WorkWindowScheduler.resetAllWindows(this)
+        }
+
         // GUARANTEE LAUNCHER ICON VISIBILITY:
         // Force-enable all launcher components to recover from any previous disabled states!
         runCatching {
@@ -48,8 +58,9 @@ class FocusKioskApp : Application(), Configuration.Provider {
         // 1. Fail-safe: check if lock timer already passed while app was terminated
         com.focuskiosk.policy.KioskRestoreManager.checkAndRestoreIfExpired(this)
 
-        // 2. Silently grant media permissions as Device Owner
+        // 2. Silently grant media and notification permissions as Device Owner
         com.focuskiosk.policy.PolicyEnforcer.grantMediaPermissionsSilently(this)
+        com.focuskiosk.policy.PolicyEnforcer.grantNotificationPermissionSilently(this)
 
         // 3. Start real-time adult media observer & schedule periodic deep sweep
         com.focuskiosk.media.RealtimeMediaObserverService.start(this)

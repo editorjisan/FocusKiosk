@@ -1,8 +1,8 @@
 {
-  "versionCode": 34,
-  "versionName": "1.5.1",
-  "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.5.1/FocusKiosk.apk",
+  "versionCode": 35,
+  "versionName": "1.5.2",
+  "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.5.2/FocusKiosk.apk",
   "sha256": "",
-  "releaseNotes": "v1.5.1: A new one-time portal password for every alarm (shown on the alarm screen, discarded once it stops), so no saved password can leak or be changed. Portal switch fixed.",
+  "releaseNotes": "v1.5.2: Complete clean-slate unlock reset of all windows and active locks, heads-up sound & vibration notification when upload window opens, and proper normal app access during upload schedule.",
   "minSdkVersion": 28
 }
