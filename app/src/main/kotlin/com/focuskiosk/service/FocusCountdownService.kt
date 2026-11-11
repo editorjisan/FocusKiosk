@@ -84,6 +84,11 @@ class FocusCountdownService : Service() {
                 }
             } else {
                 ctx.let { KioskRestoreManager.checkAndRestoreIfExpired(it) }
+                // Backup for a missed/delayed window alarm (OEM battery savers): open or close the
+                // upload window on screen-on and keep its apps unlocked while it is open.
+                CoroutineScope(Dispatchers.IO).launch {
+                    runCatching { com.focuskiosk.policy.WorkWindowScheduler.checkAndSyncWindow(context.applicationContext) }
+                }
             }
         }
     }

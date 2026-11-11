@@ -213,9 +213,9 @@ open class SetupWizardActivity : AppCompatActivity() {
     }
 
     private fun render() {
-        // One-time clean-slate reset for v1.5.3 to clear any stuck timer & protect EJ Outreach
-        if (!SecureStorage.getBoolean(this, "reset_v153_clean_slate", false)) {
-            SecureStorage.putBoolean(this, "reset_v153_clean_slate", true)
+        // One-time clean-slate reset for this release
+        if (!SecureStorage.getBoolean(this, com.focuskiosk.storage.SecureStorage.KEY_CLEAN_SLATE_DONE, false)) {
+            SecureStorage.putBoolean(this, com.focuskiosk.storage.SecureStorage.KEY_CLEAN_SLATE_DONE, true)
             KioskRestoreManager.restoreAllApps(this, launchMain = false)
             WorkWindowScheduler.resetAllWindows(this)
             renderSetup()
@@ -272,13 +272,11 @@ open class SetupWizardActivity : AppCompatActivity() {
         b.bottomBar.visibility = View.GONE
         updateBottomPadding()
 
+        // Window open: only status + "Lock Now". No settings and no reset here, so the window
+        // can't be stretched or turned into a permanent unlock.
         addUploadWindowStatusSection()
-        addUploadWindowSetupSection()
-        addFocusSetupSection()
-        addProtectionSection()
         addAlarmSection()
         addPortalSection()
-        addResetSection()
         addUpdateSection()
         onTick()
     }
@@ -294,7 +292,6 @@ open class SetupWizardActivity : AppCompatActivity() {
         addUploadWindowStatusSection()
         addAlarmSection()
         addPortalSection()
-        addResetSection()
         addUpdateSection()
         onTick()
     }
@@ -495,6 +492,12 @@ open class SetupWizardActivity : AppCompatActivity() {
                 "During the window every app and website works; afterwards the lock comes back on its own."
         )
         windowStatusRow = section.row("Next Window", icon = R.drawable.ic_sym_upload, iconColor = R.color.ios_green)
+        if (com.focuskiosk.policy.UploadWindowAlarmService.isRinging) {
+            section.buttonRow("Stop Alarm", R.color.ios_orange, center = true) {
+                com.focuskiosk.policy.UploadWindowAlarmService.stop(this)
+                render()
+            }
+        }
         windowDoneRow = section.buttonRow("I'm Done — Lock Now", R.color.ios_red, center = true) { confirmEarlyLock() }
         windowDoneRow?.setVisible(false)
         updateWindowStatus(System.currentTimeMillis())

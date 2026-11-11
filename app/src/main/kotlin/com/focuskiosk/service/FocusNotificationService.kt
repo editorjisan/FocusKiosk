@@ -56,7 +56,8 @@ class FocusNotificationService : NotificationListenerService() {
         if (pkg == PolicyEnforcer.OUTREACH_ENGINE_PACKAGE) return
 
         // If Focus Mode is active, check if this package is blocked
-        if (SecureStorage.getBoolean(applicationContext, SecureStorage.KEY_LOCK_ACTIVE, false)) {
+        if (SecureStorage.getBoolean(applicationContext, SecureStorage.KEY_LOCK_ACTIVE, false) &&
+            !com.focuskiosk.policy.WorkWindowScheduler.isWindowActive(applicationContext)) {
             val blocked = SecureStorage.getBlockedPackages(applicationContext)
             if (pkg in blocked) {
                 Log.w(TAG, "REAL-TIME SUPPRESSION: Intercepted and cancelled notification for blocked package '$pkg'")
@@ -70,6 +71,7 @@ class FocusNotificationService : NotificationListenerService() {
      */
     fun dismissBlockedNotifications() {
         if (!SecureStorage.getBoolean(applicationContext, SecureStorage.KEY_LOCK_ACTIVE, false)) return
+        if (com.focuskiosk.policy.WorkWindowScheduler.isWindowActive(applicationContext)) return
         val blocked = SecureStorage.getBlockedPackages(applicationContext)
         if (blocked.isEmpty()) return
 

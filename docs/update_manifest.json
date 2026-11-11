@@ -1,8 +1,8 @@
 {
-  "versionCode": 36,
-  "versionName": "1.5.3",
-  "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.5.3/FocusKiosk.apk",
-  "sha256": "",
-  "releaseNotes": "v1.5.3: Always exempt EJ Outreach (24/7 background email engine + notifications + VPN bypass) and fix Reset All Windows & Locks timer clearing.",
+  "versionCode": 37,
+  "versionName": "1.5.4",
+  "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.5.4/FocusKiosk.apk",
+  "sha256": "144e34512ed8e808f5566bc17df1bcd7730f721b9341c9575cd751089e18c004",
+  "releaseNotes": "v1.5.4: Upload window now reliably unlocks every app, rings a normal stoppable alarm when it opens, and the Reset/settings escape buttons are removed while locked. One-time clean reset on install.",
   "minSdkVersion": 28
 }

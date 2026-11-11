@@ -114,6 +114,19 @@ object PolicyEnforcer {
         }.onFailure { Log.e(TAG, "unsuspendPackages: ${it.message}") }
     }
 
+    /** Bulk unsuspend that falls back to one call per package if the bulk call throws. */
+    fun unsuspendPackagesRobust(context: Context, packages: Array<String>) {
+        if (!requireDeviceOwner(context) || packages.isEmpty()) return
+        try {
+            dpm(context).setPackagesSuspended(admin(context), packages, false)
+        } catch (e: Exception) {
+            Log.w(TAG, "Bulk unsuspend failed (${e.message}); unsuspending one by one.")
+            packages.forEach { pkg ->
+                runCatching { dpm(context).setPackagesSuspended(admin(context), arrayOf(pkg), false) }
+            }
+        }
+    }
+
     // ── Automated Notification Suppression & Restoration ─────────────────────
 
     /**

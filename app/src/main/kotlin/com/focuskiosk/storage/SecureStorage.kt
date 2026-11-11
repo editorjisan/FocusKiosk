@@ -42,6 +42,8 @@ object SecureStorage {
     const val KEY_WORK_WINDOW_START_MINUTE  = "work_window_start_minute"  // 0..59
     const val KEY_WORK_WINDOW_DURATION_MINS = "work_window_duration_mins" // e.g. 60
     const val KEY_WORK_WINDOW_PACKAGES      = "work_window_packages"      // Selected apps for upload window
+    /** Bump the suffix only in a release that should wipe locks once on install. */
+    const val KEY_CLEAN_SLATE_DONE          = "reset_v154_clean_slate"
     const val KEY_WORK_WINDOW_ACTIVE        = "work_window_active"        // Currently inside unlocked window
     const val KEY_WORK_WINDOW_ANCHOR_MS     = "work_window_anchor_ms"     // Epoch anchor for multi-day calculation
     const val KEY_NEXT_WINDOW_START_MS      = "next_window_start_ms"

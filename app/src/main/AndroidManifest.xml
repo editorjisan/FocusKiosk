@@ -261,6 +261,16 @@
             </intent-filter>
         </receiver>
 
+        <!-- UPLOAD WINDOW ALARM (normal alarm, stoppable from the notification) -->
+        <service
+            android:name=".policy.UploadWindowAlarmService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Alarm when the scheduled upload window opens" />
+        </service>
+
         <!-- EXTREME WAKE-UP ALARM COMPONENTS -->
         <activity
             android:name=".alarm.ExtremeAlarmActivity"

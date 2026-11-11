@@ -28,12 +28,12 @@ class FocusKioskApp : Application(), Configuration.Provider {
         // 0. Move pre-1.5 alarms and PC portal credentials to Direct Boot storage (one time).
         com.focuskiosk.alarm.AlarmStore.migrateFromSecureStorage(this)
 
-        // v1.5.3 ONE-TIME CLEAN SLATE:
+        // ONE-TIME CLEAN SLATE (per release that asks for it):
         // Reset all active windows, clear stuck locks/timers, unsuspend and unhide all apps
-        val resetDone = com.focuskiosk.storage.SecureStorage.getBoolean(this, "reset_v153_clean_slate", false)
+        val resetDone = com.focuskiosk.storage.SecureStorage.getBoolean(this, com.focuskiosk.storage.SecureStorage.KEY_CLEAN_SLATE_DONE, false)
         if (!resetDone) {
             android.util.Log.i("FocusKioskApp", "v1.5.3 Clean Slate Reset: Restoring all apps and resetting all windows/locks.")
-            com.focuskiosk.storage.SecureStorage.putBoolean(this, "reset_v153_clean_slate", true)
+            com.focuskiosk.storage.SecureStorage.putBoolean(this, com.focuskiosk.storage.SecureStorage.KEY_CLEAN_SLATE_DONE, true)
             com.focuskiosk.policy.KioskRestoreManager.restoreAllApps(this, launchMain = false)
             com.focuskiosk.policy.WorkWindowScheduler.resetAllWindows(this)
         }

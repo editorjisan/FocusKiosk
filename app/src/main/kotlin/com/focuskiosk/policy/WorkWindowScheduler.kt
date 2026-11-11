@@ -178,31 +178,45 @@ object WorkWindowScheduler {
         SecureStorage.putLong(appContext, SecureStorage.KEY_ACTIVE_WINDOW_START_MS, schedule.currentWindowStartMs)
         SecureStorage.putLong(appContext, SecureStorage.KEY_NEXT_WINDOW_END_MS, schedule.currentWindowEndMs)
 
-        // Query all installed apps to ensure NOTHING is missed or left suspended/hidden
-        val pm = appContext.packageManager
-        val flags = PackageManager.MATCH_UNINSTALLED_PACKAGES or
-                    PackageManager.GET_META_DATA or
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) PackageManager.MATCH_DISABLED_COMPONENTS else 0
+        // Arm the closing alarm FIRST, so the lock always comes back even if this process dies mid-way.
+        setExactAlarm(appContext, schedule.currentWindowEndMs, ACTION_WORK_WINDOW_END, REQUEST_CODE_END)
 
-        val installedApps = runCatching {
-            pm.getInstalledApplications(flags)
-        }.getOrElse { emptyList() }
-
-        val storedBlocked = SecureStorage.getBlockedPackages(appContext)
-        val queriedPackages = installedApps.map { it.packageName }
-        val packagesToRestore = (storedBlocked + queriedPackages + appContext.packageName).toSet()
-
-        PolicyEnforcer.unsuspendPackages(appContext, packagesToRestore.toTypedArray())
-        packagesToRestore.forEach { PolicyEnforcer.unhideApplication(appContext, it) }
-        PolicyEnforcer.restoreNotifications(appContext, packagesToRestore.toList())
+        // 1. Unlock every app (fast path first, then the slower extras).
+        unlockAllApps(appContext)
         PolicyEnforcer.clearWebFiltering(appContext)
 
-        showNotification(
-            appContext,
-            "Upload Window Open",
-            "Your phone is fully unlocked until ${timeFmt(schedule.currentWindowEndMs)}. It locks again automatically."
-        )
-        setExactAlarm(appContext, schedule.currentWindowEndMs, ACTION_WORK_WINDOW_END, REQUEST_CODE_END)
+        // 2. Ring the upload alarm (stoppable normally from the notification).
+        UploadWindowAlarmService.start(appContext, schedule.currentWindowEndMs)
+
+        // 3. Give notifications back to the apps that were blocked.
+        PolicyEnforcer.restoreNotifications(appContext, SecureStorage.getBlockedPackages(appContext).toList())
+    }
+
+    /**
+     * Unsuspends and unhides every app. Uses the stored blocked set plus everything installed,
+     * with a per-package fallback, because a single bad package must never make the bulk call
+     * fail and leave the whole phone locked during the window.
+     */
+    private fun unlockAllApps(context: Context) {
+        val pm = context.packageManager
+        val flags = PackageManager.MATCH_UNINSTALLED_PACKAGES or
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) PackageManager.MATCH_DISABLED_COMPONENTS else 0
+        val installed = runCatching { pm.getInstalledApplications(flags).map { it.packageName } }.getOrElse { emptyList() }
+        val blocked = SecureStorage.getBlockedPackages(context)
+        // Blocked apps first: they are the ones that matter.
+        val packages = (blocked.toList() + installed + context.packageName).distinct()
+        PolicyEnforcer.unsuspendPackagesRobust(context, blocked.toTypedArray())
+        PolicyEnforcer.unsuspendPackagesRobust(context, packages.toTypedArray())
+        packages.forEach { PolicyEnforcer.unhideApplication(context, it) }
+        Log.i(TAG, "Upload window: unsuspended & unhid ${packages.size} packages (${blocked.size} were blocked).")
+    }
+
+    /** Cheap re-check while the window is open (screen on / app open): make sure blocked apps are really usable. */
+    private fun reassertWindowUnlocked(context: Context) {
+        val blocked = SecureStorage.getBlockedPackages(context)
+        if (blocked.isEmpty()) return
+        PolicyEnforcer.unsuspendPackagesRobust(context, blocked.toTypedArray())
+        blocked.forEach { PolicyEnforcer.unhideApplication(context, it) }
     }
 
     /**
@@ -219,6 +233,11 @@ object WorkWindowScheduler {
         SecureStorage.putBoolean(appContext, SecureStorage.KEY_WORK_WINDOW_ACTIVE, false)
         SecureStorage.putLong(appContext, SecureStorage.KEY_ACTIVE_WINDOW_START_MS, 0L)
         cancelAlarm(appContext, ACTION_WORK_WINDOW_END, REQUEST_CODE_END)
+        UploadWindowAlarmService.stop(appContext)
+        runCatching {
+            (appContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
+                .cancel(UploadWindowAlarmService.INFO_NOTIF_ID)
+        }
 
         if (!SecureStorage.isLockActive(appContext)) return
 
@@ -246,6 +265,7 @@ object WorkWindowScheduler {
         when {
             schedule.isCurrentlyActive && !flagged -> onWindowStart(appContext)
             !schedule.isCurrentlyActive && flagged -> onWindowEnd(appContext)
+            schedule.isCurrentlyActive && flagged -> reassertWindowUnlocked(appContext)
             else -> scheduleNextWindow(appContext)
         }
     }
@@ -258,6 +278,7 @@ object WorkWindowScheduler {
     fun resetAllWindows(context: Context) {
         val appContext = context.applicationContext
         cancelAll(appContext)
+        UploadWindowAlarmService.stop(appContext)
         SecureStorage.putBoolean(appContext, SecureStorage.KEY_WORK_WINDOW_ACTIVE, false)
         SecureStorage.putLong(appContext, SecureStorage.KEY_ACTIVE_WINDOW_START_MS, 0L)
         SecureStorage.putString(appContext, SecureStorage.KEY_WORK_WINDOW_CYCLE_ID, "")
