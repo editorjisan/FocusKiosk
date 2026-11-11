@@ -551,6 +551,28 @@ object PolicyEnforcer {
         unsuspendPackages(context, companion.toTypedArray())
         companion.forEach { unhideApplication(context, it) }
         restoreNotifications(context, companion)
+        protectCompanionFromKills(context, companion)
+    }
+
+    /**
+     * Device-owner protection for the 24/7 EJ Outreach engine (Android 11+):
+     * packages in setUserControlDisabledPackages can't be force-stopped (Settings, Phone Master /
+     * OEM "cleaners" that call forceStopPackage get a SecurityException) and are placed in the
+     * EXEMPTED app-standby bucket, so their alarms, jobs and foreground service keep running.
+     */
+    private fun protectCompanionFromKills(context: Context, companion: List<String>) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
+        runCatching {
+            val installed = companion.filter { pkg ->
+                runCatching { context.packageManager.getApplicationInfo(pkg, 0); true }.getOrDefault(false)
+            }
+            val current = dpm(context).getUserControlDisabledPackages(admin(context)).toSet()
+            val wanted = current + installed
+            if (wanted != current) {
+                dpm(context).setUserControlDisabledPackages(admin(context), wanted.toList())
+                Log.i(TAG, "Protected from force-stop / standby: $installed")
+            }
+        }.onFailure { Log.w(TAG, "setUserControlDisabledPackages failed: ${it.message}") }
     }
 
     // ── Web & Deep Link Filtering ─────────────────────────────────────────────
