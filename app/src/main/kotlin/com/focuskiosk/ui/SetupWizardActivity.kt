@@ -82,6 +82,8 @@ open class SetupWizardActivity : AppCompatActivity() {
     private var windowStatusRow: IosRow? = null
     private var windowDoneRow: IosRow? = null
     private var lastWindowSync = 0L
+    private var renderedWindowOpen = false
+    private var renderedRinging = false
 
     private val ticker = object : Runnable {
         override fun run() {
@@ -225,6 +227,8 @@ open class SetupWizardActivity : AppCompatActivity() {
         val (isLocked, unlockAt) = readLockState()
         val now = System.currentTimeMillis()
         val isWindowActive = WorkWindowScheduler.isWindowActive(this)
+        renderedWindowOpen = isWindowActive
+        renderedRinging = com.focuskiosk.policy.UploadWindowAlarmService.isRinging
 
         if (isLocked && unlockAt in 1..now) {
             Log.i("SetupWizard", "Unlock time reached — restoring apps.")
@@ -262,7 +266,6 @@ open class SetupWizardActivity : AppCompatActivity() {
         addProtectionSection()
         addAlarmSection()
         addPortalSection()
-        addResetSection()
     }
 
     private fun renderUploadWindowActive(unlockAt: Long) {
@@ -298,6 +301,13 @@ open class SetupWizardActivity : AppCompatActivity() {
 
     private fun onTick() {
         val now = System.currentTimeMillis()
+        // Window opened/closed or upload alarm started/stopped while this screen is visible:
+        // redraw so the phone shows "Open Now" and the "Stop Alarm" button right away.
+        if (WorkWindowScheduler.isWindowActive(this) != renderedWindowOpen ||
+            com.focuskiosk.policy.UploadWindowAlarmService.isRinging != renderedRinging) {
+            render()
+            return
+        }
         if (lockedUntil > 0L) {
             val remaining = lockedUntil - now
             if (remaining <= 0L) {
@@ -655,27 +665,6 @@ open class SetupWizardActivity : AppCompatActivity() {
             FocusSheets.portalId(this) { render() }
         }
         section.row("Password", icon = R.drawable.ic_sym_key, iconColor = R.color.ios_gray, value = "New every alarm")
-    }
-
-    private fun addResetSection() {
-        val section = form.section(
-            "Reset & Restore",
-            footer = "Reset active focus locks, upload schedules and restore all applications so you can configure setup fresh."
-        )
-        section.buttonRow("Reset All Windows & Locks", R.color.ios_red, center = true) {
-            IosAlert(this)
-                .title("Reset All Windows & Locks?")
-                .message("This will unlock all apps immediately and reset the current focus lock and upload schedules.")
-                .action("Cancel", IosAlert.Style.CANCEL)
-                .action("Reset", IosAlert.Style.DESTRUCTIVE) {
-                    lockedUntil = 0L
-                    KioskRestoreManager.restoreAllApps(this@SetupWizardActivity, launchMain = false)
-                    WorkWindowScheduler.resetAllWindows(this@SetupWizardActivity)
-                    IosHud.show(this@SetupWizardActivity, "Reset", R.drawable.ic_sym_reset)
-                    renderSetup()
-                }
-                .show()
-        }
     }
 
     // ── Software update ───────────────────────────────────────────────────────

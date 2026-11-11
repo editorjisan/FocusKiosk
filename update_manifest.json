@@ -1,8 +1,8 @@
 {
-  "versionCode": 38,
-  "versionName": "1.5.5",
-  "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.5.5/FocusKiosk.apk",
-  "sha256": "a45ee69a812f34c334f3d5d7e172ba539e23e0da0ab6806b332fc07653ef4ee9",
-  "releaseNotes": "v1.5.5: Upload window reliably unlocks every app and rings a normal, stoppable alarm; Reset/settings escape buttons removed while locked; EJ Outreach protected from force-stop so it keeps running 24/7. One-time clean reset on install.",
+  "versionCode": 39,
+  "versionName": "1.5.6",
+  "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.5.6/FocusKiosk.apk",
+  "sha256": "6d24b1fcdc860f5cc20f66c70676bb01b83afde091120dc69ec19bac0c89c7e0",
+  "releaseNotes": "v1.5.6: Removed the red 'Reset All Windows & Locks' button. Screen updates by itself the moment the upload window opens, and shows a Stop Alarm button while the upload alarm rings. Existing lock is kept on update.",
   "minSdkVersion": 28
 }
