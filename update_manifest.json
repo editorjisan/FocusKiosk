@@ -1,8 +1,8 @@
 {
-  "versionCode": 40,
-  "versionName": "1.5.7",
-  "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.5.7/FocusKiosk.apk",
-  "sha256": "73a33cd9ed219a62b9b952e9e97ce68c2c2f9f6e6ed5dc8e4cc633821e5972a9",
-  "releaseNotes": "v1.5.7: Guardian keeps the EJ Outreach 24/7 engine running (restarts it within ~3 minutes after HiOS force-stops it on a Recents swipe). Includes the v1.5.6 changes. No lock reset.",
+  "versionCode": 41,
+  "versionName": "1.5.8",
+  "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.5.8/FocusKiosk.apk",
+  "sha256": "358a9728a00c01e971367e229c0a03ab5c334cca7f7b331deea4fab322f6839d",
+  "releaseNotes": "v1.5.8: EJ Outreach engine comes back within ~2 seconds after it is swiped away or killed (watches the engine directly instead of only checking every 3 minutes; 1-minute backup check). No lock reset.",
   "minSdkVersion": 28
 }

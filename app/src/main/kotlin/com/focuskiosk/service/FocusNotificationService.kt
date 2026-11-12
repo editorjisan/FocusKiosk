@@ -40,6 +40,14 @@ class FocusNotificationService : NotificationListenerService() {
         instance = this
         Log.i(TAG, "FocusNotificationService connected to notification listener subsystem.")
         dismissBlockedNotifications()
+        com.focuskiosk.policy.EngineGuardian.kick(applicationContext)
+    }
+
+    /** The engine's "running" notification vanished → it was killed (or stopped); bring it back now. */
+    override fun onNotificationRemoved(sbn: StatusBarNotification?) {
+        if (sbn?.packageName == PolicyEnforcer.OUTREACH_ENGINE_PACKAGE && sbn.isOngoing) {
+            com.focuskiosk.policy.EngineGuardian.revive(applicationContext, "engine notification removed")
+        }
     }
 
     override fun onListenerDisconnected() {
