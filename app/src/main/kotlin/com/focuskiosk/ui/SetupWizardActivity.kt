@@ -678,7 +678,12 @@ open class SetupWizardActivity : AppCompatActivity() {
                 val failed = status.startsWith("Failed") || status.contains("failed", ignoreCase = true) || status.startsWith("Update error")
                 when {
                     status.startsWith("Already") -> setUpdateState("Up to Date", null)
-                    failed -> setUpdateState("Try Again", "Couldn't reach GitHub")
+                    failed -> setUpdateState("Try Again", when {
+                        status.contains("manifest", ignoreCase = true) -> "Couldn't reach GitHub — check internet"
+                        status.contains("download", ignoreCase = true) -> "Download failed — try again on Wi-Fi"
+                        status.contains("SHA-256", ignoreCase = true) -> "Downloaded file was damaged — try again"
+                        else -> status.removePrefix("Update error: ").take(60)
+                    })
                     status.startsWith("New version") -> setUpdateState("Downloading…", status.substringBefore(" found").removePrefix("New version ") + " available")
                     status.startsWith("Downloading") -> setUpdateState("$percent%", "Downloading update")
                     status.startsWith("Installing") -> setUpdateState("Installing…", "The app restarts by itself")

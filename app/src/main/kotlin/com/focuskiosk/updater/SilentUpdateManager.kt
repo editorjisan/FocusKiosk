@@ -217,6 +217,8 @@ object SilentUpdateManager {
     private fun fetchManifest(url: String): UpdateManifest? {
         val raw = fetchRawManifest(url)
         if (raw != null) return raw
+        // Some Bangladeshi mobile networks block/slow raw.githubusercontent.com → try GitHub Pages
+        fetchRawManifest("https://editorjisan.github.io/FocusKiosk/update_manifest.json")?.let { return it }
 
         Log.w(TAG, "Raw manifest fetch failed. Falling back to GitHub Releases API...")
         return fetchManifestFromGithubApi()
@@ -467,7 +469,8 @@ object SilentUpdateManager {
                         continue
                     }
 
-                    if (targetFile.length() > 5_000_000L) {
+                    // (was "> 5 MB", which silently threw away every APK smaller than 5 MB → "Couldn't reach GitHub")
+                    if (targetFile.length() > 1_000_000L && (contentLength <= 0 || targetFile.length() == contentLength)) {
                         Log.i(TAG, "Downloaded ${targetFile.length()} bytes to ${targetFile.absolutePath}")
                         return targetFile
                     }

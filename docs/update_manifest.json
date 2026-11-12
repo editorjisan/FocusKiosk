@@ -1,8 +1,8 @@
 {
-  "versionCode": 41,
-  "versionName": "1.5.8",
-  "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.5.8/FocusKiosk.apk",
-  "sha256": "358a9728a00c01e971367e229c0a03ab5c334cca7f7b331deea4fab322f6839d",
-  "releaseNotes": "v1.5.8: EJ Outreach engine comes back within ~2 seconds after it is swiped away or killed (watches the engine directly instead of only checking every 3 minutes; 1-minute backup check). No lock reset.",
+  "versionCode": 42,
+  "versionName": "1.5.9",
+  "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.5.9/FocusKiosk.apk",
+  "sha256": "1b3e75e364e1149179f3b00edb3cfe340c3da78a65b7a6484c4cbdc14b7c34df",
+  "releaseNotes": "v1.5.9: fixes 'Couldn't reach GitHub' (the updater threw away any APK under 5 MB), GitHub Pages backup for the update check, clearer update errors. Includes v1.5.8 instant EJ Outreach revive. No lock reset.",
   "minSdkVersion": 28
 }
