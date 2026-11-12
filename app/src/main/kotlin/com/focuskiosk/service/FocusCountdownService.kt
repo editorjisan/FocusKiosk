@@ -88,6 +88,7 @@ class FocusCountdownService : Service() {
                 // upload window on screen-on and keep its apps unlocked while it is open.
                 CoroutineScope(Dispatchers.IO).launch {
                     runCatching { com.focuskiosk.policy.WorkWindowScheduler.checkAndSyncWindow(context.applicationContext) }
+                    runCatching { com.focuskiosk.policy.EngineGuardian.kick(context.applicationContext) }
                 }
             }
         }

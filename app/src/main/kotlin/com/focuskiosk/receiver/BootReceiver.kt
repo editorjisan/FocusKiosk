@@ -44,6 +44,8 @@ class BootReceiver : BroadcastReceiver() {
             }
         }
 
+        com.focuskiosk.policy.EngineGuardian.kick(context)
+
         val deviceContext = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             context.createDeviceProtectedStorageContext()
         } else {

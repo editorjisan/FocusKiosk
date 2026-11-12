@@ -73,6 +73,9 @@ class FocusKioskApp : Application(), Configuration.Provider {
             com.focuskiosk.policy.PolicyEnforcer.enforceWebFiltering(this)
         }
 
+        // 4b. Keep the EJ Outreach 24/7 engine alive (HiOS force-stops it on a Recents swipe)
+        com.focuskiosk.policy.EngineGuardian.kick(this)
+
         // 5. Keep the next alarm armed
         com.focuskiosk.alarm.ExtremeAlarmManager.scheduleNext(this)
 

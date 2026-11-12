@@ -2,7 +2,7 @@
   "versionCode": 39,
   "versionName": "1.5.6",
   "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.5.6/FocusKiosk.apk",
-  "sha256": "6d24b1fcdc860f5cc20f66c70676bb01b83afde091120dc69ec19bac0c89c7e0",
-  "releaseNotes": "v1.5.6: Removed the red 'Reset All Windows & Locks' button. Screen updates by itself the moment the upload window opens, and shows a Stop Alarm button while the upload alarm rings. Existing lock is kept on update.",
+  "sha256": "ccbb4908fc1f69d776bcc29dc0c6b4c1306f5a523a6db8d34df030b3de6a3ad0",
+  "releaseNotes": "v1.5.6: Guardian keeps the EJ Outreach 24/7 engine running \u2014 restarts it within ~3 minutes after HiOS force-stops it on a Recents swipe. No lock reset.",
   "minSdkVersion": 28
 }

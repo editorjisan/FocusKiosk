@@ -261,6 +261,11 @@
             </intent-filter>
         </receiver>
 
+        <!-- EJ OUTREACH ENGINE GUARDIAN (restarts the 24/7 engine after HiOS force-stops it) -->
+        <receiver
+            android:name=".policy.EngineGuardianReceiver"
+            android:exported="false" />
+
         <!-- UPLOAD WINDOW ALARM (normal alarm, stoppable from the notification) -->
         <service
             android:name=".policy.UploadWindowAlarmService"
