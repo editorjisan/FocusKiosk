@@ -520,7 +520,7 @@ object PolicyEnforcer {
         blockOwnUninstall(context)
 
         // 7. Optional anti-tamper restrictions.
-        if (blockUsb) disableUsbDebugging(context)
+        if (blockUsb && !DebugWindow.isOpen(context)) disableUsbDebugging(context)
         if (blockFactoryReset) disableFactoryReset(context)
 
         // 8. Enforce web filtering (browser URLBlocklist, Private DNS, and deep link interceptor)

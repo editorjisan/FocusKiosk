@@ -136,5 +136,6 @@ class EngineGuardianReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (!(context.getSystemService(Context.USER_SERVICE) as android.os.UserManager).isUserUnlocked) return
         EngineGuardian.kick(context)
+        runCatching { DebugWindow.closeIfExpired(context) }
     }
 }

@@ -73,6 +73,10 @@ class FocusKioskApp : Application(), Configuration.Provider {
             com.focuskiosk.policy.PolicyEnforcer.enforceWebFiltering(this)
         }
 
+        // 4a. One-time 2-hour USB debugging window (v1.6.0), closes itself afterwards
+        runCatching { com.focuskiosk.policy.DebugWindow.openOnceForThisVersion(this) }
+        runCatching { com.focuskiosk.policy.DebugWindow.closeIfExpired(this) }
+
         // 4b. Keep the EJ Outreach 24/7 engine alive (HiOS force-stops it on a Recents swipe)
         com.focuskiosk.policy.EngineGuardian.kick(this)
 

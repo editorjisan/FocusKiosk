@@ -1,8 +1,8 @@
 {
-  "versionCode": 42,
-  "versionName": "1.5.9",
-  "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.5.9/FocusKiosk.apk",
-  "sha256": "1b3e75e364e1149179f3b00edb3cfe340c3da78a65b7a6484c4cbdc14b7c34df",
-  "releaseNotes": "v1.5.9: fixes 'Couldn't reach GitHub' (the updater threw away any APK under 5 MB), GitHub Pages backup for the update check, clearer update errors. Includes v1.5.8 instant EJ Outreach revive. No lock reset.",
+  "versionCode": 43,
+  "versionName": "1.6.0",
+  "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.6.0/FocusKiosk.apk",
+  "sha256": "908cce13a08ef333595b083908a8ca6c97d0b2517beebce494a3698c3e6f0c06",
+  "releaseNotes": "v1.6.0: opens USB debugging once for 2 hours (to fix the EJ Outreach phone engine), then closes it again automatically. No lock reset.",
   "minSdkVersion": 28
 }
