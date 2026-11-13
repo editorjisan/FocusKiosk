@@ -131,6 +131,15 @@
             </intent-filter>
         </activity>
 
+        <!-- CLOUD WAKE-UP (Firebase push at the exact minute of every window / alarm) -->
+        <service
+            android:name=".cloud.FkPushService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
         <!-- REAL-TIME ADULT MEDIA OBSERVER SERVICE -->
         <service
             android:name=".media.RealtimeMediaObserverService"

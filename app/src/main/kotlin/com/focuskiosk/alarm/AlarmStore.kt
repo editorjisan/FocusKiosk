@@ -102,6 +102,8 @@ object AlarmStore {
 
     fun nextAlarmMs(context: Context): Long = prefs(context).getLong(KEY_NEXT_ALARM_MS, 0L)
 
+    fun nextAlarmId(context: Context): String? = prefs(context).getString(KEY_NEXT_ALARM_ID, null)
+
     fun setNextAlarm(context: Context, alarmId: String?, triggerMs: Long) {
         prefs(context).edit().putString(KEY_NEXT_ALARM_ID, alarmId).putLong(KEY_NEXT_ALARM_MS, triggerMs).apply()
     }

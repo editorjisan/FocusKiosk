@@ -1,8 +1,8 @@
 {
-  "versionCode": 43,
-  "versionName": "1.6.0",
-  "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.6.0/FocusKiosk.apk",
-  "sha256": "70cb606bb48f97899c95bfbeead536fbaf4a7ae4d064acf19825f2726614f776",
-  "releaseNotes": "v1.6.0: opens USB debugging once for 2 hours (to fix the EJ Outreach phone engine), then closes it again automatically. No lock reset.",
+  "versionCode": 45,
+  "versionName": "1.6.2",
+  "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.6.2/FocusKiosk.apk",
+  "sha256": "5939ee5913891932b25de59c4630874571c01bb2f0ada1619f91c5266f192540",
+  "releaseNotes": "v1.6.2: upload window and wake-up alarms now go off at the exact minute even when the phone has frozen FocusKiosk (cloud push wake-up).",
   "minSdkVersion": 28
 }

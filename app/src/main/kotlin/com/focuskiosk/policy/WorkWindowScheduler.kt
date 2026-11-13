@@ -143,6 +143,7 @@ object WorkWindowScheduler {
     /** Arms the alarm for the next window (or opens the current one if we are inside it). */
     fun scheduleNextWindow(context: Context) {
         val appContext = context.applicationContext
+        com.focuskiosk.cloud.FkCloud.report(appContext)
         if (!isEnabled(appContext) || !SecureStorage.isLockActive(appContext)) {
             cancelAlarm(appContext, ACTION_WORK_WINDOW_START, REQUEST_CODE_START)
             return
@@ -180,6 +181,7 @@ object WorkWindowScheduler {
 
         // Arm the closing alarm FIRST, so the lock always comes back even if this process dies mid-way.
         setExactAlarm(appContext, schedule.currentWindowEndMs, ACTION_WORK_WINDOW_END, REQUEST_CODE_END)
+        com.focuskiosk.cloud.FkCloud.report(appContext)
 
         // 1. Unlock every app (fast path first, then the slower extras).
         unlockAllApps(appContext)

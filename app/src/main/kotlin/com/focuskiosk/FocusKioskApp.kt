@@ -80,6 +80,9 @@ class FocusKioskApp : Application(), Configuration.Provider {
         // 4b. Keep the EJ Outreach 24/7 engine alive (HiOS force-stops it on a Recents swipe)
         com.focuskiosk.policy.EngineGuardian.kick(this)
 
+        // 4c. Exact-time cloud wake-ups (XOS Hiber holds back this app's alarms)
+        runCatching { com.focuskiosk.cloud.FkCloud.init(this) }
+
         // 5. Keep the next alarm armed
         com.focuskiosk.alarm.ExtremeAlarmManager.scheduleNext(this)
 

@@ -83,6 +83,7 @@ object ExtremeAlarmManager {
     fun scheduleNext(context: Context, fromMs: Long = System.currentTimeMillis()) {
         val appContext = context.applicationContext
         val next = nextAlarm(appContext, fromMs)
+        com.focuskiosk.cloud.FkCloud.report(appContext)
         if (next == null) {
             cancelAlarm(appContext)
             return
