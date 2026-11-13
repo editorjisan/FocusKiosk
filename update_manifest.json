@@ -2,7 +2,7 @@
   "versionCode": 43,
   "versionName": "1.6.0",
   "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.6.0/FocusKiosk.apk",
-  "sha256": "908cce13a08ef333595b083908a8ca6c97d0b2517beebce494a3698c3e6f0c06",
+  "sha256": "70cb606bb48f97899c95bfbeead536fbaf4a7ae4d064acf19825f2726614f776",
   "releaseNotes": "v1.6.0: opens USB debugging once for 2 hours (to fix the EJ Outreach phone engine), then closes it again automatically. No lock reset.",
   "minSdkVersion": 28
 }
