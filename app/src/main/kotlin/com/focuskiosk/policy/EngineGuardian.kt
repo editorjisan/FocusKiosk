@@ -103,6 +103,16 @@ object EngineGuardian {
         main.postDelayed({ wake(app); bind(app) }, 6000)  // second try in case HiOS was still cleaning up
     }
 
+    // XOS "Hiber" freezes EJ Outreach and swallows its own alarms; every service start thaws it for ~5 s,
+    // which is enough for it to report in. FocusKiosk stays awake (VPN traffic), so a plain 60-s loop here
+    // keeps the engine alive even when this app's own alarms are held back.
+    private val pulse = object : Runnable {
+        override fun run() {
+            appCtx?.let { wake(it) }
+            main.postDelayed(this, INTERVAL_MS)
+        }
+    }
+
     /** Starts watching the engine for as long as this process lives. Safe to call often. */
     fun watch(context: Context) {
         val app = context.applicationContext
@@ -110,6 +120,7 @@ object EngineGuardian {
         main.post {
             if (!watching) {
                 watching = true
+                main.postDelayed(pulse, INTERVAL_MS)
                 val f = IntentFilter().apply {
                     addAction(Intent.ACTION_PACKAGE_RESTARTED)
                     addAction(Intent.ACTION_PACKAGE_REPLACED)
