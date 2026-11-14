@@ -1,8 +1,8 @@
 {
-  "versionCode": 45,
-  "versionName": "1.6.2",
-  "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.6.2/FocusKiosk.apk",
-  "sha256": "f448bca005137e51fe9ebf323542ed120eb577fab628d554d894700950bd4e84",
-  "releaseNotes": "v1.6.2: upload window and wake-up alarms now go off at the exact minute even when the phone has frozen FocusKiosk (cloud push wake-up).",
+  "versionCode": 46,
+  "versionName": "1.6.3",
+  "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.6.3/FocusKiosk.apk",
+  "sha256": "d290aa4815a7a07b9cce52770a6e784308c5683e455d19a557c5b9a4e708da63",
+  "releaseNotes": "v1.6.3: maintenance unlock update — unsuspends all apps.",
   "minSdkVersion": 28
 }

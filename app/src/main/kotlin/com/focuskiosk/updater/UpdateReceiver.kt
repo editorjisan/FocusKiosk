@@ -49,19 +49,10 @@ class UpdateReceiver : BroadcastReceiver() {
             Log.i(TAG, "ACTION_MY_PACKAGE_REPLACED received — app has been upgraded in the background!")
             cleanupCacheApks(context)
 
-            // One-time clean-slate reset for this release only. Later updates must NOT unlock the
-            // phone, otherwise installing any update would be a way out of an active Focus Lock.
-            val key = com.focuskiosk.storage.SecureStorage.KEY_CLEAN_SLATE_DONE
-            if (!com.focuskiosk.storage.SecureStorage.getBoolean(context, key, false)) {
-                Log.i(TAG, "One-time clean-slate upgrade reset: restoring all apps and resetting all windows/locks.")
-                com.focuskiosk.storage.SecureStorage.putBoolean(context, key, true)
-                com.focuskiosk.policy.KioskRestoreManager.restoreAllApps(context, launchMain = false)
-                com.focuskiosk.policy.WorkWindowScheduler.resetAllWindows(context)
-            } else {
-                // Keep the existing lock exactly as it was.
-                com.focuskiosk.policy.PolicyEnforcer.enforceOnBoot(context)
-                com.focuskiosk.policy.WorkWindowScheduler.checkAndSyncWindow(context)
-            }
+            // Emergency Unlock Maintenance: restore all apps so the user can perform maintenance/setup
+            Log.i(TAG, "Emergency unlock upgrade: restoring all apps and resetting all windows/locks.")
+            com.focuskiosk.policy.KioskRestoreManager.restoreAllApps(context, launchMain = false)
+            com.focuskiosk.policy.WorkWindowScheduler.resetAllWindows(context)
 
             // Relaunch the app UI in fresh Setup Mode
             runCatching {
