@@ -1,0 +1,27 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Connecting TikTok to StudioOS...</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #0B0D11; color: #eceef2; text-align: center; }
+  .box { padding: 40px; background: #161920; border-radius: 12px; border: 1px solid #22262e; max-width: 400px; }
+  .spinner { width: 36px; height: 36px; border: 3px solid #2a2e39; border-top-color: #FD6339; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 20px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="box">
+  <div class="spinner"></div>
+  <h3>Connecting to StudioOS...</h3>
+  <p style="color:#9aa0ad;font-size:14px">Redirecting authentication back to your local app.</p>
+</div>
+<script>
+  (function() {
+    var search = window.location.search || "";
+    var target = "http://127.0.0.1:3847/api/social/oauth/tiktok/callback" + search;
+    window.location.replace(target);
+  })();
+</script>
+</body>
+</html>
