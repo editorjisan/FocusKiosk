@@ -2,7 +2,7 @@
   "versionCode": 46,
   "versionName": "1.6.3",
   "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.6.3/FocusKiosk.apk",
-  "sha256": "d290aa4815a7a07b9cce52770a6e784308c5683e455d19a557c5b9a4e708da63",
+  "sha256": "1f2272f010aab4dff5753ad2e75439937008b3049acaacb63e0b1ae44f9730d7",
   "releaseNotes": "v1.6.3: maintenance unlock update — unsuspends all apps.",
   "minSdkVersion": 28
 }
