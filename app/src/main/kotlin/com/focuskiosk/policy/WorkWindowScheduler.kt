@@ -183,15 +183,26 @@ object WorkWindowScheduler {
         setExactAlarm(appContext, schedule.currentWindowEndMs, ACTION_WORK_WINDOW_END, REQUEST_CODE_END)
         com.focuskiosk.cloud.FkCloud.report(appContext)
 
-        // 1. Unlock every app (fast path first, then the slower extras).
+        // 1. Ring the upload alarm FIRST: XOS/HiOS can freeze the process seconds after it wakes,
+        //    and unlocking hundreds of packages takes a while. The alarm must never depend on it.
+        ringOnce(appContext, schedule.currentWindowStartMs, schedule.currentWindowEndMs)
+
+        // 2. Unlock every app (blocked apps first, then everything else).
         unlockAllApps(appContext)
         PolicyEnforcer.clearWebFiltering(appContext)
 
-        // 2. Ring the upload alarm (stoppable normally from the notification).
-        UploadWindowAlarmService.start(appContext, schedule.currentWindowEndMs)
-
         // 3. Give notifications back to the apps that were blocked.
         PolicyEnforcer.restoreNotifications(appContext, SecureStorage.getBlockedPackages(appContext).toList())
+    }
+
+    private const val KEY_RANG_CYCLE = "work_window_rang_cycle"
+
+    /** Rings the upload alarm once per window, even if the first attempt was cut short. */
+    private fun ringOnce(context: Context, startMs: Long, endMs: Long) {
+        val id = cycleId(startMs)
+        if (SecureStorage.getString(context, KEY_RANG_CYCLE, "") == id) return
+        SecureStorage.putString(context, KEY_RANG_CYCLE, id)
+        UploadWindowAlarmService.start(context, endMs)
     }
 
     /**
@@ -209,7 +220,8 @@ object WorkWindowScheduler {
         val packages = (blocked.toList() + installed + context.packageName).distinct()
         PolicyEnforcer.unsuspendPackagesRobust(context, blocked.toTypedArray())
         PolicyEnforcer.unsuspendPackagesRobust(context, packages.toTypedArray())
-        packages.forEach { PolicyEnforcer.unhideApplication(context, it) }
+        blocked.forEach { PolicyEnforcer.unhideApplication(context, it) }
+        packages.filter { it !in blocked }.forEach { PolicyEnforcer.unhideApplication(context, it) }
         Log.i(TAG, "Upload window: unsuspended & unhid ${packages.size} packages (${blocked.size} were blocked).")
     }
 
@@ -267,8 +279,14 @@ object WorkWindowScheduler {
         when {
             schedule.isCurrentlyActive && !flagged -> onWindowStart(appContext)
             !schedule.isCurrentlyActive && flagged -> onWindowEnd(appContext)
-            schedule.isCurrentlyActive && flagged -> reassertWindowUnlocked(appContext)
-            else -> scheduleNextWindow(appContext)
+            schedule.isCurrentlyActive && flagged -> {
+                ringOnce(appContext, schedule.currentWindowStartMs, schedule.currentWindowEndMs)
+                reassertWindowUnlocked(appContext)
+            }
+            else -> {
+                PolicyEnforcer.reassertHidden(appContext)
+                scheduleNextWindow(appContext)
+            }
         }
     }
 
@@ -284,6 +302,7 @@ object WorkWindowScheduler {
         SecureStorage.putBoolean(appContext, SecureStorage.KEY_WORK_WINDOW_ACTIVE, false)
         SecureStorage.putLong(appContext, SecureStorage.KEY_ACTIVE_WINDOW_START_MS, 0L)
         SecureStorage.putString(appContext, SecureStorage.KEY_WORK_WINDOW_CYCLE_ID, "")
+        SecureStorage.putString(appContext, KEY_RANG_CYCLE, "")
         SecureStorage.putLong(appContext, SecureStorage.KEY_WORK_WINDOW_ANCHOR_MS, 0L)
         SecureStorage.putLong(appContext, SecureStorage.KEY_NEXT_WINDOW_START_MS, 0L)
         SecureStorage.putLong(appContext, SecureStorage.KEY_NEXT_WINDOW_END_MS, 0L)
@@ -306,19 +325,26 @@ object WorkWindowScheduler {
     private fun setExactAlarm(context: Context, triggerMs: Long, action: String, requestCode: Int) {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val operation = pendingIntent(context, action, requestCode)
+        // setAlarmClock is the one alarm type OEM battery managers (XOS Hiber, HiOS) never hold back.
         runCatching {
-            // Exact + allowed in Doze, without taking over the status-bar alarm icon used by real alarms.
-            alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerMs, operation)
+            val show = PendingIntent.getActivity(
+                context, requestCode + 100,
+                Intent(context, com.focuskiosk.MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            alarmManager.setAlarmClock(AlarmManager.AlarmClockInfo(triggerMs, show), operation)
         }.onFailure {
-            Log.w(TAG, "Exact alarm refused (${it.message}); using setAlarmClock.")
-            runCatching {
-                val show = PendingIntent.getActivity(
-                    context, requestCode + 100,
-                    Intent(context, com.focuskiosk.MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                )
-                alarmManager.setAlarmClock(AlarmManager.AlarmClockInfo(triggerMs, show), operation)
-            }
+            Log.w(TAG, "setAlarmClock refused (${it.message}); using exact alarm.")
+            runCatching { alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerMs, operation) }
+        }
+        // Backup a minute later in case the first one is swallowed; onWindowStart is idempotent.
+        if (action == ACTION_WORK_WINDOW_START) runCatching {
+            val backup = PendingIntent.getBroadcast(
+                context, requestCode + 200,
+                Intent(context, WorkWindowReceiver::class.java).setAction(ACTION_WORK_WINDOW_START),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerMs + 60_000L, backup)
         }
     }
 

@@ -76,6 +76,27 @@ object PolicyEnforcer {
         }.onFailure { Log.e(TAG, "hideApplication($packageName): ${it.message}") }
     }
 
+    /**
+     * Locked apps must disappear, not just turn grey. Some OEM launchers re-show a suspended app
+     * after a launcher restart, so on every sync re-hide any blocked app that is visible again.
+     */
+    fun reassertHidden(context: Context) {
+        if (!SecureStorage.isLockActive(context) || WorkWindowScheduler.isWindowActive(context)) return
+        if (!requireDeviceOwner(context)) return
+        val blocked = SecureStorage.getBlockedPackages(context)
+        var fixed = 0
+        blocked.forEach { pkg ->
+            runCatching {
+                if (!dpm(context).isApplicationHidden(admin(context), pkg)) {
+                    dpm(context).setPackagesSuspended(admin(context), arrayOf(pkg), true)
+                    dpm(context).setApplicationHidden(admin(context), pkg, true)
+                    fixed++
+                }
+            }
+        }
+        if (fixed > 0) Log.i(TAG, "reassertHidden: re-hid $fixed visible blocked apps.")
+    }
+
     fun unhideApplication(context: Context, packageName: String) {
         if (!requireDeviceOwner(context)) return
         runCatching {
