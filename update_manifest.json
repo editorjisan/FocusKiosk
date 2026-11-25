@@ -1,8 +1,8 @@
 {
-  "versionCode": 46,
-  "versionName": "1.6.3",
-  "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.6.3/FocusKiosk.apk",
-  "sha256": "1f2272f010aab4dff5753ad2e75439937008b3049acaacb63e0b1ae44f9730d7",
-  "releaseNotes": "v1.6.3: maintenance unlock update — unsuspends all apps.",
+  "versionCode": 47,
+  "versionName": "1.7.0",
+  "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.7.0/FocusKiosk.apk",
+  "sha256": "64eb23a2ea8361a8ca119c06f3a5ab20db30388332215cd54ba9bdee6823aa62",
+  "releaseNotes": "v1.7.0: daily 9:30 PM upload window (30 min + alarm) and promotional SMS filter.",
   "minSdkVersion": 28
 }
