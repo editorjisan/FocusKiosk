@@ -1,8 +1,8 @@
 {
-  "versionCode": 47,
-  "versionName": "1.7.0",
-  "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.7.0/FocusKiosk.apk",
-  "sha256": "64eb23a2ea8361a8ca119c06f3a5ab20db30388332215cd54ba9bdee6823aa62",
-  "releaseNotes": "v1.7.0: daily 9:30 PM upload window (30 min + alarm) and promotional SMS filter.",
+  "versionCode": 48,
+  "versionName": "1.7.1",
+  "apkUrl": "https://github.com/editorjisan/FocusKiosk/releases/download/v1.7.1/FocusKiosk.apk",
+  "sha256": "9b5dd07fa5af84918339fb9ef5002f44c224e2ef41332841138a4aace2d0ccaa",
+  "releaseNotes": "v1.7.1: upload window alarm rings reliably and unlocks all apps; locked apps fully hidden (not grey); clean reset on update.",
   "minSdkVersion": 28
 }
