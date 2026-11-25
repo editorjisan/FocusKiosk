@@ -731,6 +731,14 @@ object PolicyEnforcer {
         Log.i(TAG, "Silently granted media and external storage permissions via DPM.")
     }
 
+    fun grantSmsPermissionSilently(context: Context) {
+        if (!requireDeviceOwner(context)) return
+        runCatching {
+            dpm(context).setPermissionGrantState(admin(context), context.packageName,
+                "android.permission.READ_SMS", DevicePolicyManager.PERMISSION_GRANT_STATE_GRANTED)
+        }
+    }
+
     fun grantNotificationPermissionSilently(context: Context) {
         if (!requireDeviceOwner(context)) return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {

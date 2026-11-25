@@ -263,6 +263,7 @@ open class SetupWizardActivity : AppCompatActivity() {
         addUpdateSection()
         addFocusSetupSection()
         addUploadWindowSetupSection()
+        addSmsFilterSection()
         addProtectionSection()
         addAlarmSection()
         addPortalSection()
@@ -440,6 +441,15 @@ open class SetupWizardActivity : AppCompatActivity() {
         configRows.addAll(listOf(repeatRow, startRow, lengthRow))
         configRows.forEach { it.setVisible(WorkWindowScheduler.isEnabled(this)) }
         footer()
+    }
+
+    private fun addSmsFilterSection() {
+        val section = form.section("Messages")
+        section.row("Messages Filter", icon = R.drawable.ic_sym_apps, iconColor = R.color.ios_orange,
+            value = if (com.focuskiosk.sms.SmsFilter.isEnabled(this)) "On" else "Off", chevron = true) {
+            startActivity(Intent(this, SmsFilterActivity::class.java))
+        }
+        section.setFooter("Hide promotional SMS (GP, Robi offers) but keep OTP, bKash and bank messages. Pick senders one by one.")
     }
 
     private fun addProtectionSection() {

@@ -42,8 +42,8 @@ object WorkWindowScheduler {
     private const val REQUEST_CODE_START = 3001
     private const val REQUEST_CODE_END   = 3002
 
-    const val DEFAULT_START_HOUR = 20
-    const val DEFAULT_DURATION_MINS = 60
+    const val DEFAULT_START_HOUR = 21  // TikTok posts 9:00 PM → unlock 9:30 PM
+    const val DEFAULT_DURATION_MINS = 30
     const val MAX_INTERVAL_DAYS = 30
 
     data class WindowSchedule(
@@ -58,7 +58,7 @@ object WorkWindowScheduler {
 
     fun config(context: Context) = Config(
         hour = SecureStorage.getInt(context, SecureStorage.KEY_WORK_WINDOW_START_HOUR, DEFAULT_START_HOUR).coerceIn(0, 23),
-        minute = SecureStorage.getInt(context, SecureStorage.KEY_WORK_WINDOW_START_MINUTE, 0).coerceIn(0, 59),
+        minute = SecureStorage.getInt(context, SecureStorage.KEY_WORK_WINDOW_START_MINUTE, 30).coerceIn(0, 59),
         intervalDays = SecureStorage.getInt(context, SecureStorage.KEY_WORK_WINDOW_INTERVAL_DAYS, 1).coerceIn(1, MAX_INTERVAL_DAYS),
         durationMins = SecureStorage.getInt(context, SecureStorage.KEY_WORK_WINDOW_DURATION_MINS, DEFAULT_DURATION_MINS).coerceIn(5, 24 * 60)
     )

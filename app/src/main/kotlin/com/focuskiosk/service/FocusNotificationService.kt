@@ -63,6 +63,17 @@ class FocusNotificationService : NotificationListenerService() {
         val pkg = sbn.packageName ?: return
         if (pkg == PolicyEnforcer.OUTREACH_ENGINE_PACKAGE) return
 
+        // Promotional-SMS filter (works regardless of Focus Mode)
+        if (pkg in com.focuskiosk.sms.SmsFilter.MESSAGING_PACKAGES) {
+            val ex = sbn.notification.extras
+            val sender = ex.getCharSequence(android.app.Notification.EXTRA_TITLE)?.toString().orEmpty()
+            val body = ex.getCharSequence(android.app.Notification.EXTRA_TEXT)?.toString().orEmpty()
+            if (sender.isNotEmpty() && com.focuskiosk.sms.SmsFilter.shouldHide(applicationContext, sender, body)) {
+                cancelNotification(sbn.key)
+                return
+            }
+        }
+
         // If Focus Mode is active, check if this package is blocked
         if (SecureStorage.getBoolean(applicationContext, SecureStorage.KEY_LOCK_ACTIVE, false) &&
             !com.focuskiosk.policy.WorkWindowScheduler.isWindowActive(applicationContext)) {

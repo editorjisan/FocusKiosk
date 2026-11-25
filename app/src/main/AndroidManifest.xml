@@ -16,6 +16,7 @@
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
     <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.READ_SMS" />
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
 
     <!-- Storage & media permissions silently granted via DPM for adult media purging -->
@@ -73,6 +74,8 @@
             android:name=".ui.AppPickerActivity"
             android:exported="false"
             android:windowSoftInputMode="adjustResize|stateHidden" />
+
+        <activity android:name=".ui.SmsFilterActivity" android:exported="false" />
 
         <!-- Optional HomeLauncherActivity kept as secondary without HOME category -->
         <activity
